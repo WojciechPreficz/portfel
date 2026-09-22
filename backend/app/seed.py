@@ -15,6 +15,10 @@ CURATED_STOCK_TICKERS = {
     "TMR", "XTB", "ZAB", "MVP", "WSE", "TES", "R22", "BFT", "GRA", "VRC",
 }
 
+STOOQ_SYMBOL_OVERRIDES = {
+    "11BIT": "11b",
+}
+
 POLISH_MARKET_INSTRUMENTS = {
     "stock_pl": [
         {"ticker": "ALE", "name": "Allegro.eu", "type": "stock_pl"},
@@ -82,7 +86,13 @@ POLISH_MARKET_INSTRUMENTS = {
 
 SEED = [
     *[
-        {**item, "currency": "PLN", "provider": "stooq", "symbol": item["ticker"].lower(), "unit": "share"}
+        {
+            **item,
+            "currency": "PLN",
+            "provider": "stooq",
+            "symbol": STOOQ_SYMBOL_OVERRIDES.get(item["ticker"], item["ticker"].lower()),
+            "unit": "share",
+        }
         for item in POLISH_MARKET_INSTRUMENTS["stock_pl"]
     ],
     *[
@@ -147,6 +157,9 @@ def seed_instruments(db: Session) -> None:
             existing_rows["KTY"] = existing_rows["GKP"]
         if key in existing_rows:
             row = existing_rows[key]
+            override_symbol = STOOQ_SYMBOL_OVERRIDES.get(row.ticker)
+            if override_symbol:
+                row.symbol = override_symbol
             if row.isin == "LU0908500753" and row.symbol == "C6E.DE":
                 row.symbol = item["symbol"]
             continue

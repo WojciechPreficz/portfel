@@ -1,6 +1,6 @@
 import unittest
 
-from app.seed import POLISH_MARKET_INSTRUMENTS
+from app.seed import POLISH_MARKET_INSTRUMENTS, STOOQ_SYMBOL_OVERRIDES
 
 
 class SeedCatalogTest(unittest.TestCase):
@@ -14,6 +14,9 @@ class SeedCatalogTest(unittest.TestCase):
         self.assertIn("KGH", stock_tickers)
         self.assertIn("LPP", stock_tickers)
         self.assertIn("KTY", stock_tickers)
+
+    def test_provider_symbol_override_for_11bit(self):
+        self.assertEqual(STOOQ_SYMBOL_OVERRIDES["11BIT"], "11b")
 
         etf_tickers = {row["ticker"] for row in POLISH_MARKET_INSTRUMENTS["etf"]}
         self.assertIn("C6E", etf_tickers)
