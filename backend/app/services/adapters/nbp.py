@@ -24,7 +24,7 @@ class NbpAdapter:
     ) -> list[QuotePoint]:
         del symbol
         points: list[QuotePoint] = []
-        with httpx.Client(timeout=30.0, headers=HEADERS) as client:
+        with httpx.Client(timeout=10.0, headers=HEADERS) as client:
             for chunk_start, chunk_end in _daterange_chunks(start, end):
                 url = f"{NBP_GOLD}/{chunk_start.isoformat()}/{chunk_end.isoformat()}/"
                 response = client.get(url, params={"format": "json"})
@@ -59,7 +59,7 @@ class NbpAdapter:
 
 def fetch_fx_history(code: str, start: date, end: date) -> list[tuple[date, Decimal]]:
     rows: list[tuple[date, Decimal]] = []
-    with httpx.Client(timeout=30.0, headers=HEADERS) as client:
+    with httpx.Client(timeout=10.0, headers=HEADERS) as client:
         for chunk_start, chunk_end in _daterange_chunks(start, end):
             url = f"{NBP_FX}/{code.lower()}/{chunk_start.isoformat()}/{chunk_end.isoformat()}/"
             response = client.get(url, params={"format": "json"})

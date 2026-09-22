@@ -42,7 +42,7 @@ POLISH_MARKET_INSTRUMENTS = {
         {"ticker": "QRS", "name": "QRS", "type": "stock_pl"},
         {"ticker": "ATC", "name": "ATC", "type": "stock_pl"},
         {"ticker": "NXT", "name": "Nexter", "type": "stock_pl"},
-        {"ticker": "GKP", "name": "Grupa Kęty", "type": "stock_pl"},
+        {"ticker": "KTY", "name": "Grupa Kęty", "type": "stock_pl"},
         {"ticker": "KRK", "name": "Kruk", "type": "stock_pl"},
         {"ticker": "FSA", "name": "FSA", "type": "stock_pl"},
         {"ticker": "HEX", "name": "Hexagon", "type": "stock_pl"},
@@ -59,7 +59,7 @@ POLISH_MARKET_INSTRUMENTS = {
         {"ticker": "VRC", "name": "VRC", "type": "stock_pl"},
     ],
     "etf": [
-        {"ticker": "C6E", "isin": "LU0908500753", "name": "Amundi Core Stoxx Europe 600 UCITS ETF Acc EUR", "type": "etf", "currency": "EUR", "provider": "yahoo", "symbol": "C6E.DE", "unit": "share"},
+        {"ticker": "C6E", "isin": "LU0908500753", "name": "Amundi Core Stoxx Europe 600 UCITS ETF Acc EUR", "type": "etf", "currency": "EUR", "provider": "yahoo", "symbol": "LYP6.DE", "unit": "share"},
         {"ticker": "V80A", "isin": "IE00BMVB5R75", "name": "Vanguard LifeStrategy 80% Equity UCITS ETF Acc EUR", "type": "etf", "currency": "EUR", "provider": "yahoo", "symbol": "V80A.DE", "unit": "share"},
         {"ticker": "SPY", "name": "SPDR S&P 500 ETF Trust", "type": "etf", "currency": "USD", "provider": "yahoo", "symbol": "SPY", "unit": "share"},
         {"ticker": "QQQ", "name": "Invesco NASDAQ 100 ETF", "type": "etf", "currency": "USD", "provider": "yahoo", "symbol": "QQQ", "unit": "share"},
@@ -125,10 +125,18 @@ def apply_instrument_defaults(payload: dict) -> dict:
 
 
 def seed_instruments(db: Session) -> None:
-    existing = {row.isin or row.ticker for row in db.scalars(select(Instrument)).all()}
+    existing_rows = {row.isin or row.ticker: row for row in db.scalars(select(Instrument)).all()}
     for item in SEED:
         key = item.get("isin") or item["ticker"]
-        if key in existing:
+        if item["ticker"] == "KTY" and "GKP" in existing_rows:
+            existing_rows["GKP"].ticker = "KTY"
+            existing_rows["GKP"].symbol = "kty"
+            existing_rows["GKP"].name = item["name"]
+            existing_rows["KTY"] = existing_rows["GKP"]
+        if key in existing_rows:
+            row = existing_rows[key]
+            if row.isin == "LU0908500753" and row.symbol == "C6E.DE":
+                row.symbol = item["symbol"]
             continue
         db.add(Instrument(**item))
     db.commit()

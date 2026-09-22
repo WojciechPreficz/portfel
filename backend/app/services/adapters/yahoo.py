@@ -1,7 +1,7 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
-import yfinance as yf
+import httpx
 
 from app.services.adapters.base import QuotePoint
 
@@ -10,22 +10,38 @@ class YahooAdapter:
     def fetch_history(
         self, symbol: str, start: date, end: date, currency: str
     ) -> list[QuotePoint]:
-        ticker = yf.Ticker(symbol)
-        hist = ticker.history(
-            start=start.isoformat(),
-            end=(end + timedelta(days=1)).isoformat(),
-            auto_adjust=True,
+        period_start = int(datetime.combine(start, datetime.min.time(), timezone.utc).timestamp())
+        period_end = int(datetime.combine(end + timedelta(days=1), datetime.min.time(), timezone.utc).timestamp())
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+        response = httpx.get(
+            url,
+            params={
+                "period1": period_start,
+                "period2": period_end,
+                "interval": "1d",
+                "events": "history",
+                "includeAdjustedClose": "true",
+            },
+            timeout=10.0,
+            headers={"User-Agent": "Mozilla/5.0"},
         )
-        if hist is None or hist.empty:
+        if response.status_code == 404:
             return []
+        response.raise_for_status()
+        result = response.json().get("chart", {}).get("result")
+        if not result:
+            return []
+
+        chart = result[0]
+        timestamps = chart.get("timestamp", [])
+        closes = chart.get("indicators", {}).get("adjclose", [{}])[0].get("adjclose", [])
         points: list[QuotePoint] = []
-        for idx, row in hist.iterrows():
-            close = row.get("Close")
-            if close is None or close != close:
+        for timestamp, close in zip(timestamps, closes):
+            if close is None:
                 continue
             points.append(
                 QuotePoint(
-                    date=idx.date() if hasattr(idx, "date") else date.fromisoformat(str(idx)[:10]),
+                    date=date.fromtimestamp(timestamp),
                     close=Decimal(str(round(float(close), 8))),
                     currency=currency,
                 )
