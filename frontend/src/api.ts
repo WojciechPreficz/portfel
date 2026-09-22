@@ -67,7 +67,7 @@ export const createTransaction = (payload: {
   price: number;
   date: string;
   commission: number;
-  type: "BUY";
+  type: "BUY" | "SELL";
 }) =>
   api("/api/transactions", {
     method: "POST",
