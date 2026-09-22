@@ -39,6 +39,15 @@ export type PortfolioSummary = {
 
 export type HistoryPoint = { date: string; value_pln: number };
 
+export type TransactionPayload = {
+  instrument_id: number;
+  quantity: number;
+  price: number;
+  date: string;
+  commission: number;
+  type: "BUY" | "SELL";
+};
+
 const api = async <T>(path: string, options?: RequestInit): Promise<T> => {
   const response = await fetch(path, {
     headers: { "Content-Type": "application/json" },
@@ -61,14 +70,7 @@ export const getInstruments = (query = "", type?: string) => {
   return api<Instrument[]>(`/api/instruments${suffix}`);
 };
 
-export const createTransaction = (payload: {
-  instrument_id: number;
-  quantity: number;
-  price: number;
-  date: string;
-  commission: number;
-  type: "BUY" | "SELL";
-}) =>
+export const createTransaction = (payload: TransactionPayload) =>
   api("/api/transactions", {
     method: "POST",
     body: JSON.stringify(payload),
