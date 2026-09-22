@@ -25,6 +25,9 @@ const error = ref("");
 const notice = ref("");
 const activeView = ref<"overview" | "holdings">("overview");
 const showTransactionForm = ref(false);
+const positionToRemove = ref<PortfolioSummary["positions"][number] | null>(null);
+const removalQuantity = ref("");
+const removalDate = ref(new Date().toISOString().slice(0, 10));
 const historyDates = ref<string[]>([]);
 const historyValues = ref<number[]>([]);
 
@@ -91,6 +94,32 @@ const submitTransaction = async () => {
   }
 };
 
+const openRemovalForm = (position: PortfolioSummary["positions"][number], removeAll = false) => {
+  positionToRemove.value = position;
+  const quantity = Number(position.quantity);
+  removalQuantity.value = removeAll ? (Number.isInteger(quantity) ? String(quantity) : String(position.quantity)) : "";
+  removalDate.value = new Date().toISOString().slice(0, 10);
+};
+
+const closeRemovalForm = () => {
+  positionToRemove.value = null;
+  removalQuantity.value = "";
+};
+
+const removePosition = async () => {
+  const position = positionToRemove.value;
+  const quantity = Number(removalQuantity.value);
+  if (!position || !quantity || quantity <= 0 || quantity > position.quantity || !removalDate.value) return;
+  try {
+    await createTransaction({ instrument_id: position.instrument.id, quantity, price: position.price ?? 0, date: removalDate.value, commission: 0, type: "SELL" });
+    closeRemovalForm();
+    notice.value = quantity === position.quantity ? `Usunięto pozycję ${position.instrument.ticker}.` : `Usunięto ${formatNumber(quantity)} ${position.instrument.ticker}.`;
+    await loadData();
+  } catch (reason) {
+    error.value = reason instanceof Error ? reason.message : "Nie udało się usunąć pozycji.";
+  }
+};
+
 const resetMarketSelection = () => {
   form.value.instrumentId = "";
   if (!form.value.marketType) return;
@@ -149,7 +178,7 @@ onMounted(loadData);
         <section class="panel positions-panel"><div class="section-heading"><div><p class="panel-kicker">NAJWIĘKSZE POZYCJE</p><h2>Co masz w portfelu</h2></div><button class="text-button" @click="activeView = 'holdings'">Zobacz wszystkie →</button></div><div v-if="!summary?.positions.length && !loading" class="empty-state"><div class="empty-icon">+</div><h3>Portfel czeka na pierwszy zakup</h3><p>Dodaj transakcję, aby zacząć śledzić wartość i wynik.</p><button class="button button-primary" @click="showTransactionForm = true">Dodaj pierwszy zakup</button></div><div v-else class="position-list"><div v-for="position in summary?.positions.slice(0, 4)" :key="position.instrument.id" class="position-row"><div class="ticker-badge">{{ position.instrument.ticker.slice(0, 3) }}</div><div class="position-name"><strong>{{ position.instrument.ticker }}</strong><span>{{ position.instrument.name }}</span></div><div class="position-weight"><div><span :style="{ width: `${Math.min(position.weight_pct ?? 0, 100)}%` }"></span></div><small>{{ formatPercent(position.weight_pct) }}</small></div><div class="position-value"><strong>{{ formatCurrency(position.market_value_pln) }}</strong><span :class="isPositive(position.pnl_pln) ? 'positive' : 'negative'">{{ formatCurrency(position.pnl_pln) }}</span></div></div></div></section>
       </section>
 
-      <section v-else class="panel holdings-view"><div class="section-heading"><div><p class="panel-kicker">PORTFEL / {{ summary?.positions.length ?? 0 }} POZYCJI</p><h2>Wszystkie pozycje</h2></div><span class="total-caption">Łącznie {{ formatCurrency(summary?.value_pln) }}</span></div><div v-if="!summary?.positions.length && !loading" class="empty-state"><div class="empty-icon">+</div><h3>Nie ma jeszcze żadnych pozycji</h3><p>Pierwszy zakup pojawi się tutaj wraz z wyceną.</p><button class="button button-primary" @click="showTransactionForm = true">Dodaj zakup</button></div><div v-else class="table-wrap"><table><thead><tr><th>Instrument</th><th>Ilość</th><th>Ostatnia cena</th><th>Wartość PLN</th><th>Udział</th><th>Wynik</th></tr></thead><tbody><tr v-for="position in summary?.positions" :key="position.instrument.id"><td><div class="table-instrument"><div class="ticker-badge">{{ position.instrument.ticker.slice(0, 3) }}</div><div><strong>{{ position.instrument.ticker }}</strong><small>{{ position.instrument.name }}</small></div></div></td><td>{{ formatNumber(position.quantity) }} {{ position.instrument.unit === 'gram' ? 'g' : 'szt.' }}</td><td>{{ formatNumber(position.price) }} {{ position.instrument.currency }}</td><td><strong>{{ formatCurrency(position.market_value_pln) }}</strong></td><td>{{ formatPercent(position.weight_pct) }}</td><td :class="isPositive(position.pnl_pln) ? 'positive' : 'negative'">{{ formatCurrency(position.pnl_pln) }}<small>{{ formatPercent(position.pnl_pct) }}</small></td></tr></tbody></table></div></section>
+      <section v-else class="panel holdings-view"><div class="section-heading"><div><p class="panel-kicker">PORTFEL / {{ summary?.positions.length ?? 0 }} POZYCJI</p><h2>Wszystkie pozycje</h2></div><span class="total-caption">Łącznie {{ formatCurrency(summary?.value_pln) }}</span></div><div v-if="!summary?.positions.length && !loading" class="empty-state"><div class="empty-icon">+</div><h3>Nie ma jeszcze żadnych pozycji</h3><p>Pierwszy zakup pojawi się tutaj wraz z wyceną.</p><button class="button button-primary" @click="showTransactionForm = true">Dodaj zakup</button></div><div v-else class="table-wrap"><table><thead><tr><th>Instrument</th><th>Ilość</th><th>Ostatnia cena</th><th>Wartość PLN</th><th>Udział</th><th>Wynik</th><th>Akcje</th></tr></thead><tbody><tr v-for="position in summary?.positions" :key="position.instrument.id"><td><div class="table-instrument"><div class="ticker-badge">{{ position.instrument.ticker.slice(0, 3) }}</div><div><strong>{{ position.instrument.ticker }}</strong><small>{{ position.instrument.name }}</small></div></div></td><td>{{ formatNumber(position.quantity) }} {{ position.instrument.unit === 'gram' ? 'g' : 'szt.' }}</td><td>{{ formatNumber(position.price) }} {{ position.instrument.currency }}</td><td><strong>{{ formatCurrency(position.market_value_pln) }}</strong></td><td>{{ formatPercent(position.weight_pct) }}</td><td :class="isPositive(position.pnl_pln) ? 'positive' : 'negative'">{{ formatCurrency(position.pnl_pln) }}<small>{{ formatPercent(position.pnl_pct) }}</small></td><td><div class="table-actions"><button class="text-button" @click="openRemovalForm(position)">Usuń część</button><button class="text-button text-button-danger" @click="openRemovalForm(position, true)">Usuń całość</button></div></td></tr></tbody></table></div></section>
       <footer><span>Portfel prywatny · dane lokalne</span><span>Ostatnia aktualizacja: {{ summary?.as_of ?? 'brak danych' }}</span></footer>
     </main>
 
@@ -169,5 +198,7 @@ onMounted(loadData);
           </label>
 
           <div class="form-row"><label>Ilość<input v-model="form.quantity" type="number" min="0.00000001" step="any" placeholder="np. 10" required /></label><label>Cena za sztukę<input v-model="form.price" type="number" min="0" step="any" placeholder="np. 125.50" required /></label></div><div class="form-row"><label>Data zakupu<input v-model="form.date" type="date" required /></label><label>Prowizja<input v-model="form.commission" type="number" min="0" step="any" placeholder="0" /></label></div><div class="modal-actions"><button type="button" class="button button-quiet" @click="showTransactionForm = false">Anuluj</button><button type="submit" class="button button-primary">Zapisz zakup</button></div></form></section></div>
+
+    <div v-if="positionToRemove" class="modal-backdrop" @click.self="closeRemovalForm"><section class="modal"><div class="modal-heading"><div><p class="panel-kicker">ZMNIEJSZ POZYCJĘ</p><h2>Usuń {{ positionToRemove.instrument.ticker }}</h2></div><button class="close-button" aria-label="Zamknij" @click="closeRemovalForm">×</button></div><form @submit.prevent="removePosition"><p class="modal-help">Posiadasz {{ formatNumber(positionToRemove.quantity) }} {{ positionToRemove.instrument.unit === 'gram' ? 'g' : 'szt.' }}. Sprzedaż zostanie zapisana jako transakcja.</p><label>Ilość do usunięcia<input v-model="removalQuantity" type="number" min="1" :max="positionToRemove.quantity" step="1" required /></label><label>Data sprzedaży<input v-model="removalDate" type="date" required /></label><div class="modal-actions"><button type="button" class="button button-quiet" @click="closeRemovalForm">Anuluj</button><button type="submit" class="button button-danger">Usuń pozycję</button></div></form></section></div>
   </div>
 </template>
