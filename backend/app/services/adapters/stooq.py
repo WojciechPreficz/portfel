@@ -15,7 +15,7 @@ class StooqAdapter:
         self, symbol: str, start: date, end: date, currency: str
     ) -> list[QuotePoint]:
         params = {"s": symbol.lower(), "i": "d"}
-        with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+        with httpx.Client(timeout=10.0, follow_redirects=True) as client:
             response = client.get(STOOQ_URL, params=params)
             response.raise_for_status()
         text = response.text.strip()

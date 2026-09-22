@@ -13,6 +13,7 @@ class SeedCatalogTest(unittest.TestCase):
         self.assertIn("PKO", stock_tickers)
         self.assertIn("KGH", stock_tickers)
         self.assertIn("LPP", stock_tickers)
+        self.assertIn("KTY", stock_tickers)
 
         etf_tickers = {row["ticker"] for row in POLISH_MARKET_INSTRUMENTS["etf"]}
         self.assertIn("C6E", etf_tickers)
