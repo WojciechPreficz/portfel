@@ -1,6 +1,6 @@
 import unittest
 
-from app.seed import NASDAQ_STOCKS, NYSE_STOCKS, POLISH_MARKET_INSTRUMENTS, STOOQ_SYMBOL_OVERRIDES
+from app.seed import NASDAQ_STOCKS, NYSE_STOCKS, POLISH_MARKET_INSTRUMENTS, STOOQ_SYMBOL_OVERRIDES, apply_instrument_defaults
 
 
 class SeedCatalogTest(unittest.TestCase):
@@ -21,6 +21,11 @@ class SeedCatalogTest(unittest.TestCase):
         etf_tickers = {row["ticker"] for row in POLISH_MARKET_INSTRUMENTS["etf"]}
         self.assertIn("C6E", etf_tickers)
         self.assertIn("V80A", etf_tickers)
+
+    def test_meu_uses_yahoo_exchange_symbol(self):
+        instrument = apply_instrument_defaults({"ticker": "MEU", "type": "etf"})
+
+        self.assertEqual(instrument["symbol"], "MEUD.FR")
 
     def test_nasdaq_catalog_contains_us_stocks(self):
         self.assertTrue(NASDAQ_STOCKS)

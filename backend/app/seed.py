@@ -22,6 +22,10 @@ STOOQ_SYMBOL_OVERRIDES = {
     "11BIT": "11b",
 }
 
+YAHOO_SYMBOL_OVERRIDES = {
+    "MEU": "MEUD.FR",
+}
+
 POLISH_MARKET_INSTRUMENTS = {
     "stock_pl": [
         {"ticker": "ALE", "name": "Allegro.eu", "type": "stock_pl"},
@@ -78,6 +82,7 @@ POLISH_MARKET_INSTRUMENTS = {
         ],
     ],
     "etf": [
+        {"ticker": "MEU", "name": "Core STOXX Europe 600", "type": "etf", "currency": "EUR", "provider": "yahoo", "symbol": "MEUD.FR", "unit": "share"},
         {"ticker": "C6E", "isin": "LU0908500753", "name": "Amundi Core Stoxx Europe 600 UCITS ETF Acc EUR", "type": "etf", "currency": "EUR", "provider": "yahoo", "symbol": "LYP6.DE", "unit": "share"},
         {"ticker": "V80A", "isin": "IE00BMVB5R75", "name": "Vanguard LifeStrategy 80% Equity UCITS ETF Acc EUR", "type": "etf", "currency": "EUR", "provider": "yahoo", "symbol": "V80A.DE", "unit": "share"},
         {"ticker": "SPY", "name": "SPDR S&P 500 ETF Trust", "type": "etf", "currency": "USD", "provider": "yahoo", "symbol": "SPY", "unit": "share"},
@@ -145,7 +150,7 @@ def apply_instrument_defaults(payload: dict) -> dict:
     elif itype == "etf":
         data.setdefault("currency", "EUR")
         data.setdefault("provider", "yahoo")
-        data.setdefault("symbol", data.get("symbol") or ticker)
+        data.setdefault("symbol", YAHOO_SYMBOL_OVERRIDES.get(ticker, ticker))
         data.setdefault("unit", "share")
         data.setdefault("name", data.get("name") or ticker)
     elif itype == "gold":
@@ -173,6 +178,8 @@ def seed_instruments(db: Session) -> None:
             override_symbol = STOOQ_SYMBOL_OVERRIDES.get(row.ticker)
             if override_symbol:
                 row.symbol = override_symbol
+            if row.ticker == "MEU" and row.symbol == row.ticker:
+                row.symbol = item["symbol"]
             if row.isin == "LU0908500753" and row.symbol == "C6E.DE":
                 row.symbol = item["symbol"]
             continue
