@@ -24,6 +24,20 @@ class TransactionImportTest(unittest.TestCase):
         self.assertEqual(purchases[0]["quantity"], 18)
         self.assertEqual(purchases[0]["price"], Decimal("106.05"))
 
+    def test_xstation_uses_absolute_amount_when_amount_is_negative(self):
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["Time", "Type", "Symbol", "Comment", "Amount", "Price"])
+        sheet.append([datetime(2026, 9, 11), "Buy", "WEC.US", "Buy 7/18 @ 106.05", -18, 106.05])
+
+        content = BytesIO()
+        workbook.save(content)
+
+        purchases, errors = read_purchases(content.getvalue())
+
+        self.assertEqual(errors, [])
+        self.assertEqual(purchases[0]["quantity"], 18)
+
     def test_broadcom_purchase_is_adjusted_for_ten_to_one_split(self):
         workbook = Workbook()
         sheet = workbook.active
