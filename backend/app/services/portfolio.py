@@ -10,6 +10,41 @@ ZERO = Decimal("0")
 HUNDRED = Decimal("100")
 
 
+def xirr(cash_flows: list[tuple[date, Decimal]]) -> Decimal | None:
+    if not cash_flows:
+        return None
+    if not any(amount < 0 for _, amount in cash_flows) or not any(amount > 0 for _, amount in cash_flows):
+        return None
+
+    start = cash_flows[0][0]
+
+    def npv(rate: float) -> float:
+        return sum(float(amount) / (1 + rate) ** ((on_date - start).days / 365) for on_date, amount in cash_flows)
+
+    lower = -0.9999
+    lower_value = npv(lower)
+    upper = 1.0
+    upper_value = npv(upper)
+    for _ in range(32):
+        if lower_value * upper_value <= 0:
+            break
+        upper *= 2
+        upper_value = npv(upper)
+    else:
+        return None
+
+    for _ in range(100):
+        middle = (lower + upper) / 2
+        middle_value = npv(middle)
+        if abs(middle_value) < 1e-8:
+            return Decimal(str(middle))
+        if lower_value * middle_value <= 0:
+            upper, upper_value = middle, middle_value
+        else:
+            lower, lower_value = middle, middle_value
+    return Decimal(str((lower + upper) / 2))
+
+
 def _as_decimal(value) -> Decimal:
     if isinstance(value, Decimal):
         return value
@@ -163,6 +198,15 @@ def build_summary(db: Session) -> dict:
 
     positions.sort(key=lambda p: p["market_value_pln"], reverse=True)
     change_1d = total_value - total_prev
+    cash_flows = []
+    for tx in transactions:
+        fx = fx_on(db, tx.currency, tx.date, fx_cache)
+        gross = _as_decimal(tx.quantity) * _as_decimal(tx.price) * fx
+        commission = _as_decimal(tx.commission) * fx
+        cash_flows.append((tx.date, -(gross + commission) if tx.type == "BUY" else gross - commission))
+    if total_value:
+        cash_flows.append((today, total_value))
+    annual_return = xirr(cash_flows)
     return {
         "value_pln": total_value,
         "value_prev_pln": total_prev,
@@ -171,6 +215,7 @@ def build_summary(db: Session) -> dict:
         "cost_pln": total_cost,
         "pnl_pln": total_value - total_cost,
         "pnl_pct": ((total_value - total_cost) / total_cost * HUNDRED) if total_cost else None,
+        "xirr_pct": annual_return * HUNDRED if annual_return is not None else None,
         "as_of": as_of,
         "positions": positions,
     }

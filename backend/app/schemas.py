@@ -83,6 +83,7 @@ class PortfolioSummary(BaseModel):
     cost_pln: Decimal
     pnl_pln: Decimal
     pnl_pct: Decimal | None
+    xirr_pct: Decimal | None
     as_of: date | None
     positions: list[PositionOut]
 

@@ -21,6 +21,10 @@ HEADER_ALIASES = {
     "category": {"kategoria", "category"},
 }
 
+STOCK_SPLITS = {
+    "AVGO": ((date(2024, 7, 15), Decimal("10")),),
+}
+
 
 def _normalise(value: object) -> str:
     text = str(value or "").strip().lower()
@@ -67,6 +71,15 @@ def _normalise_ticker(value: object) -> str | None:
     return ticker
 
 
+def _apply_stock_splits(purchase: dict) -> dict:
+    ticker = purchase["ticker"]
+    for effective_date, ratio in STOCK_SPLITS.get(ticker, ()):
+        if purchase["date"] < effective_date:
+            purchase["quantity"] *= ratio
+            purchase["price"] /= ratio
+    return purchase
+
+
 def read_purchases(content: bytes) -> tuple[list[dict], list[str]]:
     workbook = load_workbook(BytesIO(content), read_only=True, data_only=True)
     header_candidates = []
@@ -102,6 +115,7 @@ def read_purchases(content: bytes) -> tuple[list[dict], list[str]]:
     if "ticker" not in headers and "isin" not in headers:
         missing.append("ticker lub isin")
     xstation_cash = {"date", "ticker", "type", "comment"}.issubset(headers)
+    xstation_amount = xstation_cash and "value" in headers
     if xstation_cash:
         missing = [field for field in missing if field not in {"quantity", "price lub value"}]
     if missing:
@@ -116,7 +130,16 @@ def read_purchases(content: bytes) -> tuple[list[dict], list[str]]:
         if operation and not any(word in operation for word in ("buy", "kup", "zakup", "purchase", "naby")):
             continue
         try:
-            if xstation_cash:
+            if xstation_amount:
+                quantity = _decimal(row[headers["value"]], "quantity", row_number)
+                if "price" in headers and row[headers["price"]] not in (None, ""):
+                    price = _decimal(row[headers["price"]], "price", row_number)
+                else:
+                    match = re.search(r"\bbuy\s+\d+(?:/\d+)?\s*@\s*([\d.,]+)", str(row[headers["comment"]]), re.IGNORECASE)
+                    if not match:
+                        raise ValueError(f"wiersz {row_number}: nie rozpoznano ceny")
+                    price = _decimal(match.group(1), "price", row_number)
+            elif xstation_cash:
                 match = re.search(r"\bbuy\s+(\d+(?:/\d+)?)\s*@\s*([\d.,]+)", str(row[headers["comment"]]), re.IGNORECASE)
                 if not match:
                     raise ValueError(f"wiersz {row_number}: nie rozpoznano ilosci i ceny w komentarzu")
@@ -138,7 +161,7 @@ def read_purchases(content: bytes) -> tuple[list[dict], list[str]]:
                 raise ValueError(f"wiersz {row_number}: quantity musi byc > 0")
             if price < 0:
                 raise ValueError(f"wiersz {row_number}: price musi byc >= 0")
-            purchases.append({
+            purchases.append(_apply_stock_splits({
                 "row_number": row_number,
                 "date": _date(row[headers["date"]], row_number),
                 "ticker": _normalise_ticker(row[headers["ticker"]]) if "ticker" in headers else None,
@@ -150,7 +173,7 @@ def read_purchases(content: bytes) -> tuple[list[dict], list[str]]:
                 "price": price,
                 "currency": str(row[headers["currency"]]).strip().upper() if "currency" in headers and row[headers["currency"]] else None,
                 "commission": _decimal(row[headers["commission"]], "commission", row_number) if "commission" in headers and row[headers["commission"]] not in (None, "") else Decimal("0"),
-            })
+            }))
         except ValueError as exc:
             errors.append(str(exc))
     return purchases, errors
