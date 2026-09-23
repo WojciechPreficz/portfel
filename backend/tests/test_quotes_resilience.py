@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 
 from app.services.adapters.yahoo import YahooAdapter
 from app.services.portfolio import xirr
+from app.services.quotes import _fetch_history
 
 
 class YahooAdapterTest(unittest.TestCase):
@@ -63,6 +64,22 @@ class YahooAdapterTest(unittest.TestCase):
         )
 
         self.assertEqual(points[-1].close, Decimal("362.04"))
+
+    @patch("app.services.quotes.YahooAdapter.fetch_history")
+    @patch("app.services.quotes.get_adapter")
+    def test_polish_stock_without_stooq_data_falls_back_to_yahoo(self, get_adapter, yahoo_fetch_history):
+        instrument = Mock(
+            provider="stooq",
+            currency="PLN",
+            symbol="acp",
+        )
+        get_adapter.return_value.fetch_history.return_value = []
+        yahoo_fetch_history.return_value = [Mock(date=date(2026, 9, 23), close=Decimal("226.40"), currency="PLN")]
+
+        result = _fetch_history(instrument, date(2026, 9, 22), date(2026, 9, 23))
+
+        self.assertEqual(result[0].close, Decimal("226.40"))
+        yahoo_fetch_history.assert_called_once_with("ACP.WA", date(2026, 9, 22), date(2026, 9, 23), "PLN")
 
 
 class XirrTest(unittest.TestCase):

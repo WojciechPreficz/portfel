@@ -34,12 +34,21 @@ def _upsert_fx(db: Session, pair: str, d: date, rate: Decimal) -> bool:
 def _fetch_history(instrument, start: date, end: date):
     adapter = get_adapter(instrument.provider)
     try:
-        return adapter.fetch_history(instrument.symbol, start, end, instrument.currency)
+        points = adapter.fetch_history(instrument.symbol, start, end, instrument.currency)
     except Exception:
         if instrument.provider != "stooq" or instrument.currency != "PLN":
             raise
-        fallback_symbol = f"{instrument.symbol.upper()}.WA"
+        fallback_symbol = instrument.symbol.upper()
+        if not fallback_symbol.endswith(".WA"):
+            fallback_symbol = f"{fallback_symbol}.WA"
         return YahooAdapter().fetch_history(fallback_symbol, start, end, instrument.currency)
+
+    if instrument.provider == "stooq" and instrument.currency == "PLN" and not points:
+        fallback_symbol = instrument.symbol.upper()
+        if not fallback_symbol.endswith(".WA"):
+            fallback_symbol = f"{fallback_symbol}.WA"
+        return YahooAdapter().fetch_history(fallback_symbol, start, end, instrument.currency)
+    return points
 
 
 def refresh_quotes(db: Session, years: int = 5) -> dict:
