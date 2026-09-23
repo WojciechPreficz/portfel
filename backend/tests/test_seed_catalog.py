@@ -1,6 +1,6 @@
 import unittest
 
-from app.seed import POLISH_MARKET_INSTRUMENTS, STOOQ_SYMBOL_OVERRIDES
+from app.seed import NASDAQ_STOCKS, NYSE_STOCKS, POLISH_MARKET_INSTRUMENTS, STOOQ_SYMBOL_OVERRIDES
 
 
 class SeedCatalogTest(unittest.TestCase):
@@ -21,3 +21,13 @@ class SeedCatalogTest(unittest.TestCase):
         etf_tickers = {row["ticker"] for row in POLISH_MARKET_INSTRUMENTS["etf"]}
         self.assertIn("C6E", etf_tickers)
         self.assertIn("V80A", etf_tickers)
+
+    def test_nasdaq_catalog_contains_us_stocks(self):
+        self.assertTrue(NASDAQ_STOCKS)
+        self.assertTrue(all(row["type"] == "stock_us" for row in NASDAQ_STOCKS))
+        self.assertTrue(all(row["provider"] == "yahoo" for row in NASDAQ_STOCKS))
+
+    def test_nyse_catalog_contains_separate_us_stocks(self):
+        self.assertTrue(NYSE_STOCKS)
+        self.assertTrue(all(row["type"] == "stock_us_nyse" for row in NYSE_STOCKS))
+        self.assertTrue(all(row["provider"] == "yahoo" for row in NYSE_STOCKS))

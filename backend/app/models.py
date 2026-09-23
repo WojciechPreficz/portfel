@@ -11,6 +11,7 @@ from app.database import Base
 class InstrumentType(str, Enum):
     stock_pl = "stock_pl"
     stock_us = "stock_us"
+    stock_us_nyse = "stock_us_nyse"
     etf = "etf"
     gold = "gold"
 
