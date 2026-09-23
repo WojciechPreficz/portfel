@@ -1,6 +1,6 @@
 import unittest
 
-from app.seed import NASDAQ_STOCKS, NYSE_STOCKS, POLISH_MARKET_INSTRUMENTS, STOOQ_SYMBOL_OVERRIDES, apply_instrument_defaults
+from app.seed import GPW_STOCK_TICKERS, NASDAQ_STOCKS, NYSE_STOCKS, POLISH_MARKET_INSTRUMENTS, STOOQ_SYMBOL_OVERRIDES, apply_instrument_defaults
 
 
 class SeedCatalogTest(unittest.TestCase):
@@ -14,6 +14,7 @@ class SeedCatalogTest(unittest.TestCase):
         self.assertIn("KGH", stock_tickers)
         self.assertIn("LPP", stock_tickers)
         self.assertIn("KTY", stock_tickers)
+        self.assertIn("NEUCA", GPW_STOCK_TICKERS)
 
     def test_provider_symbol_override_for_11bit(self):
         self.assertEqual(STOOQ_SYMBOL_OVERRIDES["11BIT"], "11b")

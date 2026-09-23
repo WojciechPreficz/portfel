@@ -132,6 +132,7 @@ def read_purchases(content: bytes) -> tuple[list[dict], list[str]]:
         try:
             if xstation_amount:
                 quantity = _decimal(row[headers["value"]], "quantity", row_number)
+                quantity = abs(quantity)
                 if "price" in headers and row[headers["price"]] not in (None, ""):
                     price = _decimal(row[headers["price"]], "price", row_number)
                 else:

@@ -7,11 +7,20 @@ from sqlalchemy.orm import Session, selectinload
 from app.database import get_db
 from app.models import Instrument, Transaction
 from app.schemas import TransactionCreate, TransactionImportResult, TransactionOut
-from app.seed import apply_instrument_defaults
+from app.seed import GPW_STOCK_TICKERS, apply_instrument_defaults
 from app.services.portfolio import _signed_qty
 from app.services.transaction_import import read_purchases
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
+POLISH_IMPORT_TICKERS = set(GPW_STOCK_TICKERS) | {"NEU"}
+
+
+def _infer_import_instrument_type(ticker: str | None, raw_ticker: str, category: str | None) -> str:
+    if category == "etf":
+        return "etf"
+    if ticker in POLISH_IMPORT_TICKERS:
+        return "stock_pl"
+    return "stock_us" if raw_ticker.endswith(".US") else "stock_pl"
 
 
 def _get_or_create_instrument(db: Session, payload: TransactionCreate) -> Instrument:
@@ -89,13 +98,22 @@ def import_transactions(file: UploadFile = File(...), db: Session = Depends(get_
         if purchase["isin"]:
             instrument = db.scalar(select(Instrument).where(Instrument.isin == purchase["isin"]))
         if not instrument and purchase["ticker"]:
-            instrument = db.scalar(select(Instrument).where(Instrument.ticker == purchase["ticker"]))
+            ticker_query = select(Instrument).where(Instrument.ticker == purchase["ticker"])
+            if purchase["ticker"] in POLISH_IMPORT_TICKERS:
+                ticker_query = ticker_query.where(Instrument.type == "stock_pl")
+            instrument = db.scalar(ticker_query)
         if instrument and purchase.get("name") and purchase["name"].lower() != "my trades":
             instrument.name = purchase["name"]
+        if instrument and purchase["ticker"] in POLISH_IMPORT_TICKERS and instrument.type != "stock_pl":
+            instrument.type = "stock_pl"
+            instrument.currency = "PLN"
+            instrument.provider = "stooq"
+            instrument.symbol = purchase["ticker"].lower()
+            instrument.unit = "share"
         if not instrument:
             raw_ticker = purchase.get("raw_ticker") or ""
             category = purchase.get("category")
-            instrument_type = "etf" if category == "etf" else "stock_us" if raw_ticker.endswith(".US") else "stock_pl"
+            instrument_type = _infer_import_instrument_type(purchase["ticker"], raw_ticker, category)
             if purchase["ticker"] and purchase.get("name"):
                 data = apply_instrument_defaults({
                     "ticker": purchase["ticker"],
