@@ -1,52 +1,54 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import { useRoute, useRouter } from "vue-router";
-import AppHeader from "./components/AppHeader.vue";
-import AppSidebar from "./components/AppSidebar.vue";
-import PortfolioAlerts from "./components/PortfolioAlerts.vue";
-import RemovalModal from "./components/RemovalModal.vue";
-import TransactionModal from "./components/TransactionModal.vue";
-import { usePortfolio } from "./composables/usePortfolio";
+  import { computed, onMounted, ref } from 'vue';
+  import { useRoute, useRouter } from 'vue-router';
+  import AppHeader from './components/AppHeader.vue';
+  import AppSidebar from './components/AppSidebar.vue';
+  import PortfolioAlerts from './components/PortfolioAlerts.vue';
+  import RemovalModal from './components/RemovalModal.vue';
+  import TransactionModal from './components/TransactionModal.vue';
+  import { usePortfolio } from './composables/usePortfolio';
 
-const route = useRoute();
-const router = useRouter();
-const activeView = computed<"overview" | "holdings">(() => route.name === "holdings" ? "holdings" : "overview");
-const showTransactionForm = ref(false);
-const {
-  summary,
-  loading,
-  removingAll,
-  refreshing,
-  error,
-  notice,
-  historyDates,
-  historyValues,
-  form,
-  filteredInstruments,
-  positionToRemove,
-  removalQuantity,
-  removalDate,
-  loadData,
-  submitTransaction,
-  openRemovalForm,
-  closeRemovalForm,
-  removePosition,
-  removeAllPositions,
-  resetMarketSelection,
-  updateQuotes,
-  importPurchases,
-} = usePortfolio();
+  const route = useRoute();
+  const router = useRouter();
+  const activeView = computed<'overview' | 'holdings'>(() =>
+    route.name === 'holdings' ? 'holdings' : 'overview',
+  );
+  const showTransactionForm = ref(false);
+  const {
+    summary,
+    loading,
+    removingAll,
+    refreshing,
+    error,
+    notice,
+    historyDates,
+    historyValues,
+    form,
+    filteredInstruments,
+    positionToRemove,
+    removalQuantity,
+    removalDate,
+    loadData,
+    submitTransaction,
+    openRemovalForm,
+    closeRemovalForm,
+    removePosition,
+    removeAllPositions,
+    resetMarketSelection,
+    updateQuotes,
+    importPurchases,
+  } = usePortfolio();
 
-const submitPurchase = async () => {
-  if (await submitTransaction()) showTransactionForm.value = false;
-};
+  const submitPurchase = async () => {
+    if (await submitTransaction()) showTransactionForm.value = false;
+  };
 
-const confirmRemoveAll = async () => {
-  if (!window.confirm("Czy na pewno chcesz usunąć wszystkie pozycje z portfela?")) return;
-  await removeAllPositions();
-};
+  const confirmRemoveAll = async () => {
+    if (!window.confirm('Czy na pewno chcesz usunąć wszystkie pozycje z portfela?')) return;
+    await removeAllPositions();
+  };
 
-onMounted(loadData);
+  onMounted(loadData);
 </script>
 
 <template>
@@ -77,7 +79,7 @@ onMounted(loadData);
       </RouterView>
       <footer>
         <span>Portfel prywatny · dane lokalne</span>
-        <span>Ostatnia aktualizacja: {{ summary?.as_of ?? "brak danych" }}</span>
+        <span>Ostatnia aktualizacja: {{ summary?.as_of ?? 'brak danych' }}</span>
       </footer>
     </main>
     <TransactionModal

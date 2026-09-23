@@ -46,12 +46,12 @@ export type TransactionPayload = {
   price: number;
   date: string;
   commission: number;
-  type: "BUY" | "SELL";
+  type: 'BUY' | 'SELL';
 };
 
 const api = async <T>(path: string, options?: RequestInit): Promise<T> => {
   const response = await fetch(path, {
-    headers: options?.body instanceof FormData ? undefined : { "Content-Type": "application/json" },
+    headers: options?.body instanceof FormData ? undefined : { 'Content-Type': 'application/json' },
     ...options,
   });
   if (!response.ok) {
@@ -61,34 +61,36 @@ const api = async <T>(path: string, options?: RequestInit): Promise<T> => {
   return response.json() as Promise<T>;
 };
 
-export const getPortfolio = () => api<PortfolioSummary>("/api/portfolio/summary");
-export const getHistory = () => api<HistoryPoint[]>("/api/portfolio/history");
-export const clearPortfolio = () => api<{
-  deleted_instruments: number;
-  deleted_transactions: number;
-  deleted_prices: number;
-}>("/api/portfolio/holdings", { method: "DELETE" });
-export const getInstruments = (query = "", type?: string) => {
+export const getPortfolio = () => api<PortfolioSummary>('/api/portfolio/summary');
+export const getHistory = () => api<HistoryPoint[]>('/api/portfolio/history');
+export const clearPortfolio = () =>
+  api<{
+    deleted_instruments: number;
+    deleted_transactions: number;
+    deleted_prices: number;
+  }>('/api/portfolio/holdings', { method: 'DELETE' });
+export const getInstruments = (query = '', type?: string) => {
   const params = new URLSearchParams();
-  if (query) params.set("q", query);
-  if (type) params.set("type", type);
-  const suffix = params.size ? `?${params.toString()}` : "";
+  if (query) params.set('q', query);
+  if (type) params.set('type', type);
+  const suffix = params.size ? `?${params.toString()}` : '';
   return api<Instrument[]>(`/api/instruments${suffix}`);
 };
 
 export const createTransaction = (payload: TransactionPayload) =>
-  api("/api/transactions", {
-    method: "POST",
+  api('/api/transactions', {
+    method: 'POST',
     body: JSON.stringify(payload),
   });
 
 export const importTransactions = (file: File) => {
   const body = new FormData();
-  body.append("file", file);
-  return api<{ imported: number; skipped: number; errors: string[] }>("/api/transactions/import", {
-    method: "POST",
+  body.append('file', file);
+  return api<{ imported: number; skipped: number; errors: string[] }>('/api/transactions/import', {
+    method: 'POST',
     body,
   });
 };
 
-export const refreshQuotes = () => api<{ errors: string[] }>("/api/quotes/refresh", { method: "POST" });
+export const refreshQuotes = () =>
+  api<{ errors: string[] }>('/api/quotes/refresh', { method: 'POST' });
