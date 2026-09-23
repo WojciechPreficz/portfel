@@ -90,6 +90,8 @@ def import_transactions(file: UploadFile = File(...), db: Session = Depends(get_
             instrument = db.scalar(select(Instrument).where(Instrument.isin == purchase["isin"]))
         if not instrument and purchase["ticker"]:
             instrument = db.scalar(select(Instrument).where(Instrument.ticker == purchase["ticker"]))
+        if instrument and purchase.get("name") and purchase["name"].lower() != "my trades":
+            instrument.name = purchase["name"]
         if not instrument:
             raw_ticker = purchase.get("raw_ticker") or ""
             category = purchase.get("category")
@@ -101,7 +103,6 @@ def import_transactions(file: UploadFile = File(...), db: Session = Depends(get_
                     "type": instrument_type,
                     "currency": "USD" if raw_ticker.endswith(".US") else "EUR" if instrument_type == "etf" else "PLN",
                     "provider": "yahoo" if instrument_type in {"stock_us", "etf"} else "stooq",
-                    "symbol": purchase["ticker"] if instrument_type in {"stock_us", "etf"} else purchase["ticker"].lower(),
                 })
                 instrument = Instrument(**data)
                 db.add(instrument)

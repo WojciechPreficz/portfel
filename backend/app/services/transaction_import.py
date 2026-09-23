@@ -9,7 +9,7 @@ from openpyxl import load_workbook
 HEADER_ALIASES = {
     "date": {"data", "data transakcji", "data operacji", "data zawarcia", "data realizacji", "time", "open time utc", "trade date", "transaction date"},
     "ticker": {"ticker", "symbol", "kod", "walor", "nazwa skrocona"},
-    "instrument_name": {"instrument", "nazwa", "nazwa instrumentu", "product"},
+    "instrument_name": {"instrument", "instruments", "nazwa", "nazwa instrumentu"},
     "isin": {"isin"},
     "quantity": {"ilosc", "liczba", "liczba sztuk", "ilosc instrumentow", "quantity", "qty", "wolumen"},
     "price": {"cena", "kurs", "kurs transakcji", "cena transakcji", "price", "cena jednostkowa", "kurs jednostkowy"},
