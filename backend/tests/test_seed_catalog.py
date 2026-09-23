@@ -25,7 +25,7 @@ class SeedCatalogTest(unittest.TestCase):
     def test_meu_uses_yahoo_exchange_symbol(self):
         instrument = apply_instrument_defaults({"ticker": "MEU", "type": "etf"})
 
-        self.assertEqual(instrument["symbol"], "MEUD.FR")
+        self.assertEqual(instrument["symbol"], "MEUD.MI")
 
     def test_nasdaq_catalog_contains_us_stocks(self):
         self.assertTrue(NASDAQ_STOCKS)

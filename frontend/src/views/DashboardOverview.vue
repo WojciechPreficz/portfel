@@ -32,7 +32,13 @@ const chartOption = computed(() => ({
 }));
 
 const allocationOption = computed(() => ({
-  tooltip: { trigger: "item", formatter: "{b}: {d}%" },
+  tooltip: {
+    trigger: "item",
+    formatter: (params: { name: string; percent: number }) => {
+      const position = props.summary?.positions.find((item) => item.instrument.ticker === params.name);
+      return `${position?.instrument.name ?? params.name}: ${params.percent}%`;
+    },
+  },
   legend: { bottom: 0, left: "center", textStyle: { color: "#596158" } },
   series: [{ type: "pie", radius: ["52%", "76%"], center: ["50%", "42%"], avoidLabelOverlap: true, label: { show: false }, data: (props.summary?.positions ?? []).map((position) => ({ name: position.instrument.ticker, value: position.market_value_pln })), itemStyle: { borderColor: "#fbfcf8", borderWidth: 3 } }],
   color: ["#17201b", "#b9e85d", "#ee806d", "#8cb7a4", "#d8ae57"],

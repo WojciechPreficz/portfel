@@ -23,7 +23,7 @@ STOOQ_SYMBOL_OVERRIDES = {
 }
 
 YAHOO_SYMBOL_OVERRIDES = {
-    "MEU": "MEUD.FR",
+    "MEU": "MEUD.MI",
 }
 
 POLISH_MARKET_INSTRUMENTS = {
@@ -82,7 +82,7 @@ POLISH_MARKET_INSTRUMENTS = {
         ],
     ],
     "etf": [
-        {"ticker": "MEU", "name": "Core STOXX Europe 600", "type": "etf", "currency": "EUR", "provider": "yahoo", "symbol": "MEUD.FR", "unit": "share"},
+        {"ticker": "MEU", "name": "Core STOXX Europe 600", "type": "etf", "currency": "EUR", "provider": "yahoo", "symbol": "MEUD.MI", "unit": "share"},
         {"ticker": "C6E", "isin": "LU0908500753", "name": "Amundi Core Stoxx Europe 600 UCITS ETF Acc EUR", "type": "etf", "currency": "EUR", "provider": "yahoo", "symbol": "LYP6.DE", "unit": "share"},
         {"ticker": "V80A", "isin": "IE00BMVB5R75", "name": "Vanguard LifeStrategy 80% Equity UCITS ETF Acc EUR", "type": "etf", "currency": "EUR", "provider": "yahoo", "symbol": "V80A.DE", "unit": "share"},
         {"ticker": "SPY", "name": "SPDR S&P 500 ETF Trust", "type": "etf", "currency": "USD", "provider": "yahoo", "symbol": "SPY", "unit": "share"},
@@ -178,7 +178,7 @@ def seed_instruments(db: Session) -> None:
             override_symbol = STOOQ_SYMBOL_OVERRIDES.get(row.ticker)
             if override_symbol:
                 row.symbol = override_symbol
-            if row.ticker == "MEU" and row.symbol == row.ticker:
+            if row.ticker == "MEU" and row.symbol in {row.ticker, "MEUD.FR"}:
                 row.symbol = item["symbol"]
             if row.isin == "LU0908500753" and row.symbol == "C6E.DE":
                 row.symbol = item["symbol"]
