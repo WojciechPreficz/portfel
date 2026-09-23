@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -84,6 +87,14 @@ POLISH_MARKET_INSTRUMENTS = {
     ],
 }
 
+NASDAQ_STOCKS_PATH = Path(__file__).resolve().parents[2] / "data" / "nasdaq_stocks.json"
+NYSE_STOCKS_PATH = Path(__file__).resolve().parents[2] / "data" / "nyse_stocks.json"
+
+with NASDAQ_STOCKS_PATH.open(encoding="utf-8") as nasdaq_file:
+    NASDAQ_STOCKS = json.load(nasdaq_file)
+with NYSE_STOCKS_PATH.open(encoding="utf-8") as nyse_file:
+    NYSE_STOCKS = [{**item, "type": "stock_us_nyse"} for item in json.load(nyse_file)]
+
 SEED = [
     *[
         {
@@ -99,6 +110,8 @@ SEED = [
         {**item, "currency": item.get("currency", "EUR"), "provider": item.get("provider", "yahoo"), "symbol": item.get("symbol", item["ticker"]), "unit": item.get("unit", "share")}
         for item in POLISH_MARKET_INSTRUMENTS["etf"]
     ],
+    *NASDAQ_STOCKS,
+    *NYSE_STOCKS,
     {
         "ticker": "XAU",
         "isin": None,
@@ -123,7 +136,7 @@ def apply_instrument_defaults(payload: dict) -> dict:
         data.setdefault("symbol", ticker.lower())
         data.setdefault("unit", "share")
         data.setdefault("name", ticker)
-    elif itype == "stock_us":
+    elif itype in {"stock_us", "stock_us_nyse"}:
         data.setdefault("currency", "USD")
         data.setdefault("provider", "yahoo")
         data.setdefault("symbol", ticker)

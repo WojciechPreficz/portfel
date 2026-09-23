@@ -21,6 +21,8 @@ defineEmits<{
 
 const marketTypeOptions = [
   { value: "stock_pl", label: "Spółka z polskiego rynku akcji" },
+  { value: "stock_us", label: "Spółka amerykańska notowana na NASDAQ" },
+  { value: "stock_us_nyse", label: "Spółka amerykańska notowana na giełdzie nowojorskiej (NYSE)" },
   { value: "etf", label: "ETF" },
 ];
 </script>
@@ -35,7 +37,7 @@ const marketTypeOptions = [
     </label>
     <label v-if="form.marketType">Instrument
       <select v-model="form.instrumentId" required>
-        <option value="" disabled>Wybierz {{ form.marketType === 'stock_pl' ? 'spółkę' : 'ETF' }}</option>
+        <option value="" disabled>Wybierz {{ form.marketType === 'etf' ? 'ETF' : 'spółkę' }}</option>
         <option v-for="instrument in instruments" :key="instrument.id" :value="instrument.id">{{ instrument.ticker }} · {{ instrument.name }}</option>
       </select>
     </label>
