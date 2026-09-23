@@ -1,5 +1,6 @@
 import {
   createTransaction,
+  clearPortfolio,
   getHistory,
   getInstruments,
   getPortfolio,
@@ -25,6 +26,10 @@ export const portfolioService = {
 
   refreshQuotes() {
     return refreshQuotes();
+  },
+
+  clearPortfolio() {
+    return clearPortfolio();
   },
 
   importPurchases(file: File) {

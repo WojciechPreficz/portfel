@@ -118,16 +118,8 @@ export const usePortfolio = () => {
     if (!positions.length) return;
     removingAll.value = true;
     try {
-      for (const position of positions) {
-        await portfolioService.sell({
-        instrument_id: position.instrument.id,
-        quantity: position.quantity,
-        price: position.price ?? 0,
-        date: today(),
-        commission: 0,
-        });
-      }
-      notice.value = `Usunięto ${positions.length} pozycji z portfela.`;
+      const result = await portfolioService.clearPortfolio();
+      notice.value = `Usunięto ${result.deleted_instruments} spółek oraz ${result.deleted_transactions} transakcji.`;
       await loadData();
     } catch (reason) {
       error.value = reason instanceof Error ? reason.message : "Nie udało się usunąć wszystkich pozycji.";
