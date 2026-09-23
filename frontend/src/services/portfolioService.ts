@@ -3,6 +3,7 @@ import {
   getHistory,
   getInstruments,
   getPortfolio,
+  importTransactions,
   refreshQuotes,
   type TransactionPayload,
 } from "../api";
@@ -24,5 +25,9 @@ export const portfolioService = {
 
   refreshQuotes() {
     return refreshQuotes();
+  },
+
+  importPurchases(file: File) {
+    return importTransactions(file);
   },
 };

@@ -32,6 +32,7 @@ const {
   removePosition,
   resetMarketSelection,
   updateQuotes,
+  importPurchases,
 } = usePortfolio();
 
 const submitPurchase = async () => {
@@ -50,6 +51,7 @@ onMounted(loadData);
         :refreshing="refreshing"
         @refresh="updateQuotes"
         @add-purchase="showTransactionForm = true"
+        @import-purchases="importPurchases"
       />
       <PortfolioAlerts :error="error" :notice="notice" @retry="loadData" />
       <RouterView v-slot="{ Component }">

@@ -54,6 +54,12 @@ class TransactionOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class TransactionImportResult(BaseModel):
+    imported: int
+    skipped: int
+    errors: list[str]
+
+
 class PositionOut(BaseModel):
     instrument: InstrumentOut
     quantity: Decimal
