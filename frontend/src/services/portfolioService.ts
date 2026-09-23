@@ -7,9 +7,9 @@ import {
   importTransactions,
   refreshQuotes,
   type TransactionPayload,
-} from "../api";
+} from '../api';
 
-export type TransactionInput = Omit<TransactionPayload, "type">;
+export type TransactionInput = Omit<TransactionPayload, 'type'>;
 
 export const portfolioService = {
   loadSnapshot() {
@@ -17,11 +17,11 @@ export const portfolioService = {
   },
 
   buy(payload: TransactionInput) {
-    return createTransaction({ ...payload, type: "BUY" });
+    return createTransaction({ ...payload, type: 'BUY' });
   },
 
   sell(payload: TransactionInput) {
-    return createTransaction({ ...payload, type: "SELL" });
+    return createTransaction({ ...payload, type: 'SELL' });
   },
 
   refreshQuotes() {

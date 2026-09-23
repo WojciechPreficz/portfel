@@ -1,12 +1,12 @@
 <script setup lang="ts">
-defineProps<{
-  error: string;
-  notice: string;
-}>();
+  defineProps<{
+    error: string;
+    notice: string;
+  }>();
 
-defineEmits<{
-  retry: [];
-}>();
+  defineEmits<{
+    retry: [];
+  }>();
 </script>
 
 <template>
