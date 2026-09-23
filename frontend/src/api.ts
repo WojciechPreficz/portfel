@@ -63,6 +63,11 @@ const api = async <T>(path: string, options?: RequestInit): Promise<T> => {
 
 export const getPortfolio = () => api<PortfolioSummary>("/api/portfolio/summary");
 export const getHistory = () => api<HistoryPoint[]>("/api/portfolio/history");
+export const clearPortfolio = () => api<{
+  deleted_instruments: number;
+  deleted_transactions: number;
+  deleted_prices: number;
+}>("/api/portfolio/holdings", { method: "DELETE" });
 export const getInstruments = (query = "", type?: string) => {
   const params = new URLSearchParams();
   if (query) params.set("q", query);
