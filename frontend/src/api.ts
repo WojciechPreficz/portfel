@@ -50,7 +50,7 @@ export type TransactionPayload = {
 
 const api = async <T>(path: string, options?: RequestInit): Promise<T> => {
   const response = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
+    headers: options?.body instanceof FormData ? undefined : { "Content-Type": "application/json" },
     ...options,
   });
   if (!response.ok) {
@@ -75,5 +75,14 @@ export const createTransaction = (payload: TransactionPayload) =>
     method: "POST",
     body: JSON.stringify(payload),
   });
+
+export const importTransactions = (file: File) => {
+  const body = new FormData();
+  body.append("file", file);
+  return api<{ imported: number; skipped: number; errors: string[] }>("/api/transactions/import", {
+    method: "POST",
+    body,
+  });
+};
 
 export const refreshQuotes = () => api<{ errors: string[] }>("/api/quotes/refresh", { method: "POST" });

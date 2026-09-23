@@ -134,6 +134,24 @@ export const usePortfolio = () => {
     }
   };
 
+  const importPurchases = async (file: File) => {
+    error.value = "";
+    notice.value = "Importuję zakupy...";
+    try {
+      const result = await portfolioService.importPurchases(file);
+      if (result.errors.length) {
+        error.value = result.errors.join("; ");
+        notice.value = "Import anulowany. Popraw wskazane wiersze i spróbuj ponownie.";
+        return;
+      }
+      notice.value = `Zaimportowano ${result.imported} zakupów.`;
+      await loadData();
+    } catch (reason) {
+      error.value = reason instanceof Error ? reason.message : "Nie udało się zaimportować zakupów.";
+      notice.value = "";
+    }
+  };
+
   return {
     summary,
     instruments,
@@ -155,5 +173,6 @@ export const usePortfolio = () => {
     removePosition,
     resetMarketSelection,
     updateQuotes,
+    importPurchases,
   };
 };
