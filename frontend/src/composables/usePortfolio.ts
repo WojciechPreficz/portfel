@@ -178,7 +178,7 @@ export const usePortfolio = () => {
         notice.value = 'Import anulowany. Popraw wskazane wiersze i spróbuj ponownie.';
         return;
       }
-      notice.value = `Zaimportowano ${result.imported} zakupów.`;
+      notice.value = `Zaimportowano ${result.imported} zakupów i ${result.deposits} wpłat.`;
       await loadData();
     } catch (reason) {
       error.value =

@@ -5,11 +5,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
-from app.models import Instrument, Transaction
+from app.models import CashDeposit, Instrument, Transaction
 from app.schemas import TransactionCreate, TransactionImportResult, TransactionOut
 from app.seed import GPW_STOCK_TICKERS, apply_instrument_defaults
 from app.services.portfolio import _signed_qty
-from app.services.transaction_import import read_purchases
+from app.services.transaction_import import read_deposits, read_purchases
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 POLISH_IMPORT_TICKERS = set(GPW_STOCK_TICKERS) | {"NEU"}
@@ -86,7 +86,10 @@ def import_transactions(file: UploadFile = File(...), db: Session = Depends(get_
     if not file.filename or not file.filename.lower().endswith(".xlsx"):
         raise HTTPException(400, "Wybierz plik Excel w formacie .xlsx")
     try:
-        purchases, errors = read_purchases(file.file.read())
+        content = file.file.read()
+        purchases, errors = read_purchases(content)
+        deposits, deposit_errors = read_deposits(content)
+        errors.extend(deposit_errors)
     except (ValueError, KeyError) as exc:
         raise HTTPException(400, str(exc)) from exc
     if errors:
@@ -140,8 +143,16 @@ def import_transactions(file: UploadFile = File(...), db: Session = Depends(get_
     if errors:
         return TransactionImportResult(imported=0, skipped=len(errors), errors=errors)
     db.add_all(transactions)
+    db.add_all(
+        CashDeposit(
+            date=deposit["date"],
+            amount=deposit["amount"],
+            currency=deposit["currency"],
+        )
+        for deposit in deposits
+    )
     db.commit()
-    return TransactionImportResult(imported=len(transactions), skipped=0, errors=[])
+    return TransactionImportResult(imported=len(transactions), deposits=len(deposits), skipped=0, errors=[])
 
 
 @router.delete("/{transaction_id}")

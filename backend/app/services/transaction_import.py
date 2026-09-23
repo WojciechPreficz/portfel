@@ -173,3 +173,54 @@ def read_purchases(content: bytes) -> tuple[list[dict], list[str]]:
         except ValueError as exc:
             errors.append(str(exc))
     return purchases, errors
+
+
+def read_deposits(content: bytes) -> tuple[list[dict], list[str]]:
+    workbook = load_workbook(BytesIO(content), read_only=True, data_only=True)
+    sheet = next((sheet for sheet in workbook.worksheets if _normalise(sheet.title) == "cash operations"), None)
+    if sheet is None:
+        return [], []
+
+    sheet.reset_dimensions()
+    rows = list(sheet.iter_rows(values_only=True))
+    header_index = None
+    headers = {}
+    for row_index, row in enumerate(rows):
+        candidate = {}
+        for index, value in enumerate(row):
+            normalised = _normalise(value)
+            for field, aliases in HEADER_ALIASES.items():
+                if normalised in aliases:
+                    candidate[field] = index
+                    break
+        if "date" in candidate and "type" in candidate and "value" in candidate:
+            header_index = row_index
+            headers = candidate
+            break
+    if header_index is None:
+        return [], []
+
+    deposits = []
+    errors = []
+    for row_number, row in enumerate(rows[header_index + 1:], start=header_index + 2):
+        operation = _normalise(row[headers["type"]]) if len(row) > headers["type"] else ""
+        if operation not in {"deposit", "wplata", "cash deposit"}:
+            continue
+        try:
+            amount = abs(_decimal(row[headers["value"]], "amount", row_number))
+            if amount <= 0:
+                raise ValueError(f"wiersz {row_number}: amount musi byc > 0")
+            deposits.append(
+                {
+                    "date": _date(row[headers["date"]], row_number),
+                    "amount": amount,
+                    "currency": (
+                        str(row[headers["currency"]]).strip().upper()
+                        if "currency" in headers and row[headers["currency"]]
+                        else "PLN"
+                    ),
+                }
+            )
+        except ValueError as exc:
+            errors.append(str(exc))
+    return deposits, errors

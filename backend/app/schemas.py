@@ -56,6 +56,7 @@ class TransactionOut(BaseModel):
 
 class TransactionImportResult(BaseModel):
     imported: int
+    deposits: int = 0
     skipped: int
     errors: list[str]
 

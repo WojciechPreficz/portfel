@@ -5,10 +5,27 @@ from io import BytesIO
 
 from openpyxl import Workbook
 
-from app.services.transaction_import import read_purchases
+from app.services.transaction_import import read_deposits, read_purchases
 
 
 class TransactionImportTest(unittest.TestCase):
+    def test_xstation_cash_operations_reads_deposits(self):
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "Cash Operations"
+        sheet.append(["Time", "Type", "Ticker", "Comment", "Amount"])
+        sheet.append([datetime(2026, 9, 11), "Deposit", None, "Cash deposit", 35000])
+        sheet.append([datetime(2026, 9, 12), "Deposit", None, "Cash deposit", -5000])
+
+        content = BytesIO()
+        workbook.save(content)
+
+        deposits, errors = read_deposits(content.getvalue())
+
+        self.assertEqual(errors, [])
+        self.assertEqual([deposit["amount"] for deposit in deposits], [Decimal("35000"), Decimal("5000")])
+        self.assertEqual([deposit["currency"] for deposit in deposits], ["PLN", "PLN"])
+
     def test_xstation_cash_operations_uses_ticker_and_instrument_name(self):
         workbook = Workbook()
         workbook.active.title = "Summary"

@@ -86,7 +86,7 @@ export const createTransaction = (payload: TransactionPayload) =>
 export const importTransactions = (file: File) => {
   const body = new FormData();
   body.append('file', file);
-  return api<{ imported: number; skipped: number; errors: string[] }>('/api/transactions/import', {
+  return api<{ imported: number; deposits: number; skipped: number; errors: string[] }>('/api/transactions/import', {
     method: 'POST',
     body,
   });

@@ -4,7 +4,7 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import FxRate, Instrument, Price, Transaction
+from app.models import CashDeposit, FxRate, Instrument, Price, Transaction
 
 ZERO = Decimal("0")
 HUNDRED = Decimal("100")
@@ -198,14 +198,20 @@ def build_summary(db: Session) -> dict:
 
     positions.sort(key=lambda p: p["market_value_pln"], reverse=True)
     change_1d = total_value - total_prev
+    deposits = list(db.scalars(select(CashDeposit).order_by(CashDeposit.date, CashDeposit.id)).all())
     cash_flows = []
-    for tx in transactions:
-        fx = fx_on(db, tx.currency, tx.date, fx_cache)
-        gross = _as_decimal(tx.quantity) * _as_decimal(tx.price) * fx
-        commission = _as_decimal(tx.commission) * fx
-        cash_flows.append((tx.date, -(gross + commission) if tx.type == "BUY" else gross - commission))
+    if deposits:
+        for deposit in deposits:
+            fx = fx_on(db, deposit.currency, deposit.date, fx_cache)
+            cash_flows.append((deposit.date, -_as_decimal(deposit.amount) * fx))
+    else:
+        for tx in transactions:
+            fx = fx_on(db, tx.currency, tx.date, fx_cache)
+            gross = _as_decimal(tx.quantity) * _as_decimal(tx.price) * fx
+            commission = _as_decimal(tx.commission) * fx
+            cash_flows.append((tx.date, -(gross + commission) if tx.type == "BUY" else gross - commission))
     if total_value:
-        cash_flows.append((today, total_value))
+        cash_flows.append((as_of or today, total_value))
     annual_return = xirr(cash_flows)
     return {
         "value_pln": total_value,

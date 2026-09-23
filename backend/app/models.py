@@ -54,6 +54,16 @@ class Transaction(Base):
     instrument: Mapped[Instrument] = relationship(back_populates="transactions")
 
 
+class CashDeposit(Base):
+    __tablename__ = "cash_deposits"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    date: Mapped[date_type] = mapped_column(Date, index=True)
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 8))
+    currency: Mapped[str] = mapped_column(String(3), default="PLN")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
 class Price(Base):
     __tablename__ = "prices"
     __table_args__ = (UniqueConstraint("instrument_id", "date", name="uq_price_instrument_date"),)
