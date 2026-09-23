@@ -26,6 +26,8 @@ YAHOO_SYMBOL_OVERRIDES = {
     "MEU": "MEUD.MI",
 }
 
+US_TICKER_EXCLUSIONS = {"ACP"}
+
 POLISH_MARKET_INSTRUMENTS = {
     "stock_pl": [
         {"ticker": "ALE", "name": "Allegro.eu", "type": "stock_pl"},
@@ -98,7 +100,11 @@ NYSE_STOCKS_PATH = Path(__file__).resolve().parents[2] / "data" / "nyse_stocks.j
 with NASDAQ_STOCKS_PATH.open(encoding="utf-8") as nasdaq_file:
     NASDAQ_STOCKS = json.load(nasdaq_file)
 with NYSE_STOCKS_PATH.open(encoding="utf-8") as nyse_file:
-    NYSE_STOCKS = [{**item, "type": "stock_us_nyse"} for item in json.load(nyse_file)]
+    NYSE_STOCKS = [
+        {**item, "type": "stock_us_nyse"}
+        for item in json.load(nyse_file)
+        if item.get("ticker", "").upper() not in US_TICKER_EXCLUSIONS
+    ]
 
 SEED = [
     *[
@@ -178,6 +184,17 @@ def seed_instruments(db: Session) -> None:
         legacy_neu.symbol = "neu"
         existing_rows[("NEU", "stock_pl")] = legacy_neu
         del existing_rows[("NEU", "stock_us_nyse")]
+
+    legacy_acp = existing_rows.get(("ACP", "stock_us_nyse"))
+    if legacy_acp:
+        legacy_acp.name = "Asseco Poland"
+        legacy_acp.type = "stock_pl"
+        legacy_acp.currency = "PLN"
+        legacy_acp.provider = "stooq"
+        legacy_acp.symbol = "acp"
+        existing_rows[("ACP", "stock_pl")] = legacy_acp
+        del existing_rows[("ACP", "stock_us_nyse")]
+
     for item in SEED:
         key = (item.get("isin") or item["ticker"], item["type"])
         if item["ticker"] == "KTY" and ("GKP", "stock_pl") in existing_rows:
