@@ -15,3 +15,6 @@ footer { color: #929991; display: flex; justify-content: space-between; font-siz
 .nav-list a.active { color: #17201b; background: #c2ec62; font-weight: 700; }
 .nav-list a.active span { color: #536a2b; }
 @media (max-width: 640px) { .nav-list a { padding: 8px; } .nav-list a span { display: none; } }
+.content-grid { grid-template-columns: 1.4fr repeat(3, 1fr); }
+.chart-panel, .allocation-panel, .positions-panel { grid-column: span 4; }
+@media (max-width: 900px) { .chart-panel, .allocation-panel, .positions-panel { grid-column: span 2; } }

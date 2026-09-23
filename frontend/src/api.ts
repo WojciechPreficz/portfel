@@ -33,6 +33,7 @@ export type PortfolioSummary = {
   cost_pln: number;
   pnl_pln: number;
   pnl_pct: number | null;
+  xirr_pct: number | null;
   as_of: string | null;
   positions: Position[];
 };

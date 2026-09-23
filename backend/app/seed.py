@@ -165,14 +165,26 @@ def apply_instrument_defaults(payload: dict) -> dict:
 
 
 def seed_instruments(db: Session) -> None:
-    existing_rows = {row.isin or row.ticker: row for row in db.scalars(select(Instrument)).all()}
+    existing_rows = {
+        (row.isin or row.ticker, row.type): row
+        for row in db.scalars(select(Instrument)).all()
+    }
+    legacy_neu = existing_rows.get(("NEU", "stock_us_nyse"))
+    if legacy_neu and legacy_neu.name.upper() in {"NEWMARKET CORP", "NEUCA"}:
+        legacy_neu.name = "Neuca"
+        legacy_neu.type = "stock_pl"
+        legacy_neu.currency = "PLN"
+        legacy_neu.provider = "stooq"
+        legacy_neu.symbol = "neu"
+        existing_rows[("NEU", "stock_pl")] = legacy_neu
+        del existing_rows[("NEU", "stock_us_nyse")]
     for item in SEED:
-        key = item.get("isin") or item["ticker"]
-        if item["ticker"] == "KTY" and "GKP" in existing_rows:
-            existing_rows["GKP"].ticker = "KTY"
-            existing_rows["GKP"].symbol = "kty"
-            existing_rows["GKP"].name = item["name"]
-            existing_rows["KTY"] = existing_rows["GKP"]
+        key = (item.get("isin") or item["ticker"], item["type"])
+        if item["ticker"] == "KTY" and ("GKP", "stock_pl") in existing_rows:
+            existing_rows[("GKP", "stock_pl")].ticker = "KTY"
+            existing_rows[("GKP", "stock_pl")].symbol = "kty"
+            existing_rows[("GKP", "stock_pl")].name = item["name"]
+            existing_rows[("KTY", "stock_pl")] = existing_rows[("GKP", "stock_pl")]
         if key in existing_rows:
             row = existing_rows[key]
             override_symbol = STOOQ_SYMBOL_OVERRIDES.get(row.ticker)
