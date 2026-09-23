@@ -15,6 +15,7 @@ const showTransactionForm = ref(false);
 const {
   summary,
   loading,
+  removingAll,
   refreshing,
   error,
   notice,
@@ -30,6 +31,7 @@ const {
   openRemovalForm,
   closeRemovalForm,
   removePosition,
+  removeAllPositions,
   resetMarketSelection,
   updateQuotes,
   importPurchases,
@@ -37,6 +39,11 @@ const {
 
 const submitPurchase = async () => {
   if (await submitTransaction()) showTransactionForm.value = false;
+};
+
+const confirmRemoveAll = async () => {
+  if (!window.confirm("Czy na pewno chcesz usunąć wszystkie pozycje z portfela?")) return;
+  await removeAllPositions();
 };
 
 onMounted(loadData);
@@ -59,11 +66,13 @@ onMounted(loadData);
           :is="Component"
           :summary="summary"
           :loading="loading"
+          :removing-all="removingAll"
           :history-dates="historyDates"
           :history-values="historyValues"
           @add-purchase="showTransactionForm = true"
           @show-holdings="router.push('/holdings')"
           @remove-position="openRemovalForm"
+          @remove-all="confirmRemoveAll"
         />
       </RouterView>
       <footer>

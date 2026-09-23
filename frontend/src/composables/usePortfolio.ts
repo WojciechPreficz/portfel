@@ -26,6 +26,7 @@ export const usePortfolio = () => {
   const summary = ref<PortfolioSummary | null>(null);
   const instruments = ref<Instrument[]>([]);
   const loading = ref(true);
+  const removingAll = ref(false);
   const refreshing = ref(false);
   const error = ref("");
   const notice = ref("");
@@ -112,6 +113,29 @@ export const usePortfolio = () => {
     }
   };
 
+  const removeAllPositions = async () => {
+    const positions = summary.value?.positions ?? [];
+    if (!positions.length) return;
+    removingAll.value = true;
+    try {
+      for (const position of positions) {
+        await portfolioService.sell({
+        instrument_id: position.instrument.id,
+        quantity: position.quantity,
+        price: position.price ?? 0,
+        date: today(),
+        commission: 0,
+        });
+      }
+      notice.value = `Usunięto ${positions.length} pozycji z portfela.`;
+      await loadData();
+    } catch (reason) {
+      error.value = reason instanceof Error ? reason.message : "Nie udało się usunąć wszystkich pozycji.";
+    } finally {
+      removingAll.value = false;
+    }
+  };
+
   const resetMarketSelection = () => {
     form.value.instrumentId = "";
   };
@@ -156,6 +180,7 @@ export const usePortfolio = () => {
     summary,
     instruments,
     loading,
+    removingAll,
     refreshing,
     error,
     notice,
@@ -171,6 +196,7 @@ export const usePortfolio = () => {
     openRemovalForm,
     closeRemovalForm,
     removePosition,
+    removeAllPositions,
     resetMarketSelection,
     updateQuotes,
     importPurchases,

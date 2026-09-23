@@ -18,3 +18,5 @@ footer { color: #929991; display: flex; justify-content: space-between; font-siz
 .content-grid { grid-template-columns: 1.4fr repeat(3, 1fr); }
 .chart-panel, .allocation-panel, .positions-panel { grid-column: span 4; }
 @media (max-width: 900px) { .chart-panel, .allocation-panel, .positions-panel { grid-column: span 2; } }
+.section-heading-actions { display: flex; align-items: center; gap: 14px; }.text-button-danger { color: #b04f45; }.text-button-danger:hover { color: #8b4239; }
+.loading-state { min-height: 230px; display: grid; place-items: center; align-content: center; gap: 12px; color: #7b817b; font-size: 12px; }.loading-state p { margin: 0; }.loading-spinner { width: 24px; height: 24px; border: 2px solid #dfe5dc; border-top-color: #799168; border-radius: 50%; animation: spin .8s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }
