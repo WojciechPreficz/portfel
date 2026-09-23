@@ -37,3 +37,10 @@ class SeedCatalogTest(unittest.TestCase):
         self.assertTrue(NYSE_STOCKS)
         self.assertTrue(all(row["type"] == "stock_us_nyse" for row in NYSE_STOCKS))
         self.assertTrue(all(row["provider"] == "yahoo" for row in NYSE_STOCKS))
+
+    def test_polish_asseco_acp_is_not_loaded_as_us_stock(self):
+        stock_pl_tickers = {row["ticker"] for row in POLISH_MARKET_INSTRUMENTS["stock_pl"]}
+        nyse_tickers = {row["ticker"] for row in NYSE_STOCKS}
+
+        self.assertIn("ACP", stock_pl_tickers)
+        self.assertNotIn("ACP", nyse_tickers)
