@@ -83,9 +83,14 @@ def _apply_stock_splits(purchase: dict) -> dict:
 def read_purchases(content: bytes) -> tuple[list[dict], list[str]]:
     workbook = load_workbook(BytesIO(content), read_only=True, data_only=True)
     header_candidates = []
+    xstation_sheet = False
     for sheet_index, sheet in enumerate(workbook.worksheets):
+        if _normalise(sheet.title) == "cash operations":
+            xstation_sheet = True
         sheet.reset_dimensions()
         rows = list(sheet.iter_rows(values_only=True))
+        if xstation_sheet:
+            header_candidates = []
         for row_index, row in enumerate(rows):
             normalised_values = {_normalise(value) for value in row if value not in (None, "")}
             recognised = sum(
@@ -97,6 +102,8 @@ def read_purchases(content: bytes) -> tuple[list[dict], list[str]]:
                 recognised += 5
             if recognised:
                 header_candidates.append((recognised, -sheet_index, -row_index, rows))
+        if xstation_sheet:
+            break
     if not header_candidates:
         raise ValueError("Arkusz jest pusty")
     _, _, negative_header_index, rows = max(header_candidates)
@@ -115,7 +122,6 @@ def read_purchases(content: bytes) -> tuple[list[dict], list[str]]:
     if "ticker" not in headers and "isin" not in headers:
         missing.append("ticker lub isin")
     xstation_cash = {"date", "ticker", "type", "comment"}.issubset(headers)
-    xstation_amount = xstation_cash and "value" in headers
     if xstation_cash:
         missing = [field for field in missing if field not in {"quantity", "price lub value"}]
     if missing:
@@ -130,24 +136,13 @@ def read_purchases(content: bytes) -> tuple[list[dict], list[str]]:
         if operation and not any(word in operation for word in ("buy", "kup", "zakup", "purchase", "naby")):
             continue
         try:
-            if xstation_amount:
-                quantity = _decimal(row[headers["value"]], "quantity", row_number)
-                quantity = abs(quantity)
-                if "price" in headers and row[headers["price"]] not in (None, ""):
-                    price = _decimal(row[headers["price"]], "price", row_number)
-                else:
-                    match = re.search(r"\bbuy\s+\d+(?:/\d+)?\s*@\s*([\d.,]+)", str(row[headers["comment"]]), re.IGNORECASE)
-                    if not match:
-                        raise ValueError(f"wiersz {row_number}: nie rozpoznano ceny")
-                    price = _decimal(match.group(1), "price", row_number)
-            elif xstation_cash:
+            if xstation_cash:
                 match = re.search(r"\bbuy\s+(\d+(?:/\d+)?)\s*@\s*([\d.,]+)", str(row[headers["comment"]]), re.IGNORECASE)
                 if not match:
                     raise ValueError(f"wiersz {row_number}: nie rozpoznano ilosci i ceny w komentarzu")
                 quantity_text = match.group(1)
                 if "/" in quantity_text:
-                    numerator, denominator = quantity_text.split("/", 1)
-                    quantity = Decimal(numerator) / Decimal(denominator)
+                    quantity = Decimal(quantity_text.split("/", 1)[0])
                 else:
                     quantity = Decimal(quantity_text)
                 price = _decimal(match.group(2), "price", row_number)
