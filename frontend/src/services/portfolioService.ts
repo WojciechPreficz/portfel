@@ -32,7 +32,7 @@ export const portfolioService = {
     return clearPortfolio();
   },
 
-  importPurchases(file: File) {
-    return importTransactions(file);
+  importPurchases(file: File, source: 'xstation5' | 'bossa') {
+    return importTransactions(file, source);
   },
 };

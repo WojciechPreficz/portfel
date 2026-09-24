@@ -168,11 +168,11 @@ export const usePortfolio = () => {
     }
   };
 
-  const importPurchases = async (file: File) => {
+  const importPurchases = async (file: File, source: 'xstation5' | 'bossa') => {
     error.value = '';
     notice.value = 'Importuję zakupy...';
     try {
-      const result = await portfolioService.importPurchases(file);
+      const result = await portfolioService.importPurchases(file, source);
       if (result.errors.length) {
         error.value = result.errors.join('; ');
         notice.value = 'Import anulowany. Popraw wskazane wiersze i spróbuj ponownie.';

@@ -5,10 +5,27 @@ from io import BytesIO
 
 from openpyxl import Workbook
 
-from app.services.transaction_import import read_deposits, read_purchases
+from app.services.transaction_import import read_bossa_purchases, read_deposits, read_purchases
 
 
 class TransactionImportTest(unittest.TestCase):
+    def test_bossa_csv_reads_transactions(self):
+        content = (
+            "Data;Walor;Rachunek;Waluta;Liczba;Strona;Cena;Wartość przed prowizją;Prowizja;Wartość po prowizji\n"
+            "10.10.2022 09:04:13;Vanguard LifeStrategy 80% Equity UCITS ETF;IKE 816742;PLN;132,00;K;130,307;17200,49;49,88;17250,37\n"
+            "11.10.2022 09:04:13;Vanguard LifeStrategy 80% Equity UCITS ETF;IKE 816742;PLN;2,00;S;140,000;280,00;0,00;280,00\n"
+        ).encode()
+
+        purchases, errors = read_bossa_purchases(content)
+
+        self.assertEqual(errors, [])
+        self.assertEqual(purchases[0]["date"].isoformat(), "2022-10-10")
+        self.assertEqual(purchases[0]["quantity"], Decimal("132.00"))
+        self.assertEqual(purchases[0]["price"], Decimal("130.307"))
+        self.assertEqual(purchases[0]["commission"], Decimal("49.88"))
+        self.assertEqual(purchases[0]["type"], "BUY")
+        self.assertEqual(purchases[1]["type"], "SELL")
+
     def test_xstation_cash_operations_reads_deposits(self):
         workbook = Workbook()
         sheet = workbook.active

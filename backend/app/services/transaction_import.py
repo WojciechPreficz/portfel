@@ -1,6 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
-from io import BytesIO
+from io import BytesIO, StringIO
+import csv
 import re
 
 from openpyxl import load_workbook
@@ -53,7 +54,7 @@ def _date(value: object, row_number: int) -> date:
         return value.date()
     if isinstance(value, date):
         return value
-    for pattern in ("%Y-%m-%d", "%d.%m.%Y", "%d-%m-%Y", "%d/%m/%Y"):
+    for pattern in ("%Y-%m-%d", "%d.%m.%Y %H:%M:%S", "%d.%m.%Y", "%d-%m-%Y", "%d/%m/%Y"):
         try:
             return datetime.strptime(str(value).strip(), pattern).date()
         except ValueError:
@@ -170,6 +171,58 @@ def read_purchases(content: bytes) -> tuple[list[dict], list[str]]:
                 "currency": str(row[headers["currency"]]).strip().upper() if "currency" in headers and row[headers["currency"]] else None,
                 "commission": _decimal(row[headers["commission"]], "commission", row_number) if "commission" in headers and row[headers["commission"]] not in (None, "") else Decimal("0"),
             }))
+        except ValueError as exc:
+            errors.append(str(exc))
+    return purchases, errors
+
+
+def read_bossa_purchases(content: bytes) -> tuple[list[dict], list[str]]:
+    try:
+        text = content.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = content.decode("cp1250")
+    reader = csv.DictReader(StringIO(text), delimiter=";")
+    headers = {_normalise(header): header for header in (reader.fieldnames or [])}
+    required = {"data", "walor", "waluta", "liczba", "strona", "cena", "prowizja"}
+    missing = sorted(required - set(headers))
+    if missing:
+        raise ValueError(f"Brak wymaganych kolumn: {', '.join(missing)}")
+
+    purchases = []
+    errors = []
+    for row_number, row in enumerate(reader, start=2):
+        if not any(value and value.strip() for value in row.values()):
+            continue
+        try:
+            side = _normalise(row[headers["strona"]])
+            if side not in {"k", "s"}:
+                raise ValueError(f"wiersz {row_number}: nieprawidlowa strona transakcji: {row[headers['strona']]}")
+            quantity = _decimal(row[headers["liczba"]], "quantity", row_number)
+            price = _decimal(row[headers["cena"]], "price", row_number)
+            commission = _decimal(row[headers["prowizja"]], "commission", row_number)
+            if quantity <= 0:
+                raise ValueError(f"wiersz {row_number}: quantity musi byc > 0")
+            if price < 0:
+                raise ValueError(f"wiersz {row_number}: price musi byc >= 0")
+            if commission < 0:
+                raise ValueError(f"wiersz {row_number}: commission musi byc >= 0")
+            name = row[headers["walor"]].strip()
+            if not name:
+                raise ValueError(f"wiersz {row_number}: brak pola instrument")
+            purchases.append({
+                "row_number": row_number,
+                "date": _date(row[headers["data"]], row_number),
+                "ticker": None,
+                "raw_ticker": None,
+                "name": name,
+                "category": "etf",
+                "isin": None,
+                "quantity": quantity,
+                "price": price,
+                "currency": row[headers["waluta"]].strip().upper(),
+                "commission": commission,
+                "type": "BUY" if side == "k" else "SELL",
+            })
         except ValueError as exc:
             errors.append(str(exc))
     return purchases, errors
