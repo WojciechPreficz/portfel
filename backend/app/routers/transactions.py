@@ -1,7 +1,7 @@
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
@@ -9,7 +9,7 @@ from app.models import CashDeposit, Instrument, Transaction
 from app.schemas import TransactionCreate, TransactionImportResult, TransactionOut
 from app.seed import GPW_STOCK_TICKERS, apply_instrument_defaults
 from app.services.portfolio import _signed_qty
-from app.services.transaction_import import read_deposits, read_purchases
+from app.services.transaction_import import read_bossa_purchases, read_deposits, read_purchases
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 POLISH_IMPORT_TICKERS = set(GPW_STOCK_TICKERS) | {"NEU"}
@@ -82,13 +82,20 @@ def create_transaction(payload: TransactionCreate, db: Session = Depends(get_db)
 
 
 @router.post("/import", response_model=TransactionImportResult)
-def import_transactions(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    if not file.filename or not file.filename.lower().endswith(".xlsx"):
-        raise HTTPException(400, "Wybierz plik Excel w formacie .xlsx")
+def import_transactions(
+    file: UploadFile = File(...),
+    source: str = Form("xstation5"),
+    db: Session = Depends(get_db),
+):
+    if source not in {"xstation5", "bossa"}:
+        raise HTTPException(400, "Nieznane źródło importu")
+    expected_extension = ".xlsx" if source == "xstation5" else ".csv"
+    if not file.filename or not file.filename.lower().endswith(expected_extension):
+        raise HTTPException(400, f"Wybierz plik {expected_extension}")
     try:
         content = file.file.read()
-        purchases, errors = read_purchases(content)
-        deposits, deposit_errors = read_deposits(content)
+        purchases, errors = read_purchases(content) if source == "xstation5" else read_bossa_purchases(content)
+        deposits, deposit_errors = read_deposits(content) if source == "xstation5" else ([], [])
         errors.extend(deposit_errors)
     except (ValueError, KeyError) as exc:
         raise HTTPException(400, str(exc)) from exc
@@ -105,6 +112,11 @@ def import_transactions(file: UploadFile = File(...), db: Session = Depends(get_
             if purchase["ticker"] in POLISH_IMPORT_TICKERS:
                 ticker_query = ticker_query.where(Instrument.type == "stock_pl")
             instrument = db.scalar(ticker_query)
+        if not instrument and purchase.get("name"):
+            normalized_name = purchase["name"].strip().lower()
+            instrument = db.scalar(
+                select(Instrument).where(func.lower(Instrument.name).like(f"{normalized_name}%"))
+            )
         if instrument and purchase.get("name") and purchase["name"].lower() != "my trades":
             instrument.name = purchase["name"]
         if instrument and purchase["ticker"] in POLISH_IMPORT_TICKERS and instrument.type != "stock_pl":
@@ -133,7 +145,7 @@ def import_transactions(file: UploadFile = File(...), db: Session = Depends(get_
                 continue
         transactions.append(Transaction(
             instrument_id=instrument.id,
-            type="BUY",
+            type=purchase.get("type", "BUY"),
             quantity=purchase["quantity"],
             price=purchase["price"],
             currency=purchase["currency"] or instrument.currency,

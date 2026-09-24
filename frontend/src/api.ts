@@ -83,9 +83,10 @@ export const createTransaction = (payload: TransactionPayload) =>
     body: JSON.stringify(payload),
   });
 
-export const importTransactions = (file: File) => {
+export const importTransactions = (file: File, source: 'xstation5' | 'bossa') => {
   const body = new FormData();
   body.append('file', file);
+  body.append('source', source);
   return api<{ imported: number; deposits: number; skipped: number; errors: string[] }>('/api/transactions/import', {
     method: 'POST',
     body,

@@ -3,6 +3,7 @@
   import { useRoute, useRouter } from 'vue-router';
   import AppHeader from './components/AppHeader.vue';
   import AppSidebar from './components/AppSidebar.vue';
+  import ImportModal from './components/ImportModal.vue';
   import PortfolioAlerts from './components/PortfolioAlerts.vue';
   import RemovalModal from './components/RemovalModal.vue';
   import TransactionModal from './components/TransactionModal.vue';
@@ -14,6 +15,7 @@
     route.name === 'holdings' ? 'holdings' : 'overview',
   );
   const showTransactionForm = ref(false);
+  const showImportModal = ref(false);
   const {
     summary,
     loading,
@@ -60,7 +62,7 @@
         :refreshing="refreshing"
         @refresh="updateQuotes"
         @add-purchase="showTransactionForm = true"
-        @import-purchases="importPurchases"
+        @import-purchases="showImportModal = true"
       />
       <PortfolioAlerts :error="error" :notice="notice" @retry="loadData" />
       <RouterView v-slot="{ Component }">
@@ -89,6 +91,11 @@
       @close="showTransactionForm = false"
       @submit="submitPurchase"
       @market-type-change="resetMarketSelection"
+    />
+    <ImportModal
+      v-if="showImportModal"
+      @close="showImportModal = false"
+      @submit="(file, source) => { showImportModal = false; importPurchases(file, source); }"
     />
     <RemovalModal
       v-if="positionToRemove"

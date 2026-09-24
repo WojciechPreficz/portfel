@@ -591,6 +591,12 @@ footer {
   gap: 9px;
   margin-top: 8px;
 }
+.import-modal-hint {
+  color: #7b817b;
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 2px 0 0;
+}
 @media (max-width: 900px) {
   .sidebar {
     width: 190px;
