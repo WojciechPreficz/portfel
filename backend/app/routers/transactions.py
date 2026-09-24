@@ -18,6 +18,8 @@ POLISH_IMPORT_TICKERS = set(GPW_STOCK_TICKERS) | {"NEU"}
 def _infer_import_instrument_type(ticker: str | None, raw_ticker: str, category: str | None) -> str:
     if category == "etf":
         return "etf"
+    if raw_ticker.endswith(".PL"):
+        return "stock_pl"
     if ticker in POLISH_IMPORT_TICKERS:
         return "stock_pl"
     return "stock_us" if raw_ticker.endswith(".US") else "stock_pl"
@@ -119,7 +121,11 @@ def import_transactions(
             )
         if instrument and purchase.get("name") and purchase["name"].lower() != "my trades":
             instrument.name = purchase["name"]
-        if instrument and purchase["ticker"] in POLISH_IMPORT_TICKERS and instrument.type != "stock_pl":
+        if (
+            instrument
+            and (purchase["ticker"] in POLISH_IMPORT_TICKERS or (purchase.get("raw_ticker") or "").endswith(".PL"))
+            and instrument.type != "stock_pl"
+        ):
             instrument.type = "stock_pl"
             instrument.currency = "PLN"
             instrument.provider = "stooq"
