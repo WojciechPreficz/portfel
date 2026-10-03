@@ -29,7 +29,19 @@ class InstrumentCreate(BaseModel):
     unit: str | None = None
 
 
+class PortfolioCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+
+
+class PortfolioOut(BaseModel):
+    id: int
+    name: str
+
+    model_config = {"from_attributes": True}
+
+
 class TransactionCreate(BaseModel):
+    portfolio_id: int | None = None
     instrument_id: int | None = None
     instrument: InstrumentCreate | None = None
     type: str = "BUY"

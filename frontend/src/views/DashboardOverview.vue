@@ -13,6 +13,7 @@
   defineEmits<{
     addPurchase: [];
     showHoldings: [];
+    createPortfolio: [];
   }>();
 
   const props = defineProps<{
@@ -20,6 +21,7 @@
     loading: boolean;
     historyDates: string[];
     historyValues: number[];
+    isAggregate: boolean;
   }>();
 
   const chartOption = computed(() => ({
@@ -148,16 +150,16 @@
       <div class="section-heading">
         <div>
           <p class="panel-kicker">NAJWIĘKSZE POZYCJE</p>
-          <h2>Co masz w portfelu</h2>
+          <h2>{{ isAggregate ? 'Co masz w portfelach' : 'Co masz w portfelu' }}</h2>
         </div>
-        <button class="text-button" @click="$emit('showHoldings')">Zobacz wszystkie →</button>
+        <button v-if="!isAggregate" class="text-button" @click="$emit('showHoldings')">Zobacz wszystkie →</button>
       </div>
       <div v-if="!summary?.positions.length && !loading" class="empty-state">
         <div class="empty-icon">+</div>
-        <h3>Portfel czeka na pierwszy zakup</h3>
-        <p>Dodaj transakcję, aby zacząć śledzić wartość i wynik.</p>
-        <button class="button button-primary" @click="$emit('addPurchase')">
-          Dodaj pierwszy zakup
+        <h3>{{ isAggregate ? 'Utwórz pierwszy portfel' : 'Portfel czeka na pierwszy zakup' }}</h3>
+        <p>{{ isAggregate ? 'Twoje portfele i ich łączna wartość pojawią się tutaj.' : 'Dodaj transakcję, aby zacząć śledzić wartość i wynik.' }}</p>
+        <button class="button button-primary" @click="isAggregate ? $emit('createPortfolio') : $emit('addPurchase')">
+          {{ isAggregate ? 'Utwórz portfel' : 'Dodaj pierwszy zakup' }}
         </button>
       </div>
       <div v-else class="position-list">

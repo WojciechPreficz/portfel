@@ -2,6 +2,8 @@
   defineProps<{
     activeView: 'overview' | 'holdings';
     refreshing: boolean;
+    portfolioName: string;
+    hasPortfolio: boolean;
   }>();
 
   const emit = defineEmits<{
@@ -25,13 +27,15 @@
   <header class="topbar">
     <div>
       <p class="eyebrow">{{ currentDateLabel }}</p>
-      <h1>{{ activeView === 'overview' ? 'Dzień dobry, Wojciech' : 'Twoje pozycje' }}</h1>
+      <h1>{{ activeView === 'holdings' ? `Pozycje · ${portfolioName}` : portfolioName }}</h1>
     </div>
     <div class="top-actions">
       <button class="button button-quiet" :disabled="refreshing" @click="$emit('refresh')">
         {{ refreshing ? 'Odświeżam...' : 'Odśwież notowania' }}</button
-      ><button class="button button-quiet" @click="$emit('importPurchases')">Importuj zakupy</button
-      ><button class="button button-primary" @click="$emit('addPurchase')">+ Dodaj zakup</button>
+      ><template v-if="hasPortfolio"
+        ><button class="button button-quiet" @click="$emit('importPurchases')">Importuj zakupy</button
+        ><button class="button button-primary" @click="$emit('addPurchase')">+ Dodaj zakup</button></template
+      >
     </div>
   </header>
 </template>

@@ -1,21 +1,45 @@
 <script setup lang="ts">
+  import type { Portfolio } from '../api';
+
   defineProps<{
-    activeView: 'overview' | 'holdings';
-    positionCount: number;
+    portfolios: Portfolio[];
+    activePortfolioId: number | null;
+  }>();
+
+  defineEmits<{
+    createPortfolio: [];
+    renamePortfolio: [portfolio: Portfolio];
   }>();
 </script>
 
 <template>
   <aside class="sidebar">
     <div class="brand"><span class="brand-mark">P</span><span>portfel</span></div>
-    <div class="sidebar-label">Widok</div>
     <nav class="nav-list">
-      <RouterLink to="/" :class="{ active: activeView === 'overview' }"
-        >Przegląd <span>01</span></RouterLink
-      >
-      <RouterLink to="/holdings" :class="{ active: activeView === 'holdings' }"
-        >Pozycje <span>{{ positionCount }}</span></RouterLink
-      >
+      <RouterLink to="/" class="nav-link" :class="{ active: activePortfolioId === null }">
+        Majątek <span>Σ</span>
+      </RouterLink>
+      <div class="sidebar-label">Portfele</div>
+      <div class="portfolio-nav">
+        <div v-for="portfolio in portfolios" :key="portfolio.id" class="portfolio-nav-row">
+          <RouterLink
+            :to="`/portfolios/${portfolio.id}`"
+            class="nav-link"
+            :class="{ active: activePortfolioId === portfolio.id }"
+          >
+            {{ portfolio.name }}
+          </RouterLink>
+          <button
+            class="rename-portfolio"
+            :aria-label="`Zmień nazwę portfela ${portfolio.name}`"
+            :title="`Zmień nazwę: ${portfolio.name}`"
+            @click="$emit('renamePortfolio', portfolio)"
+          >
+            Edytuj
+          </button>
+        </div>
+      </div>
+      <button class="new-portfolio-button" @click="$emit('createPortfolio')">+ Nowy portfel</button>
     </nav>
     <div class="sidebar-bottom">
       <div class="status-dot"></div>

@@ -7,13 +7,24 @@
   import PortfolioAlerts from './components/PortfolioAlerts.vue';
   import RemovalModal from './components/RemovalModal.vue';
   import TransactionModal from './components/TransactionModal.vue';
+  import { createPortfolio as createPortfolioRequest, getPortfolios, renamePortfolio as renamePortfolioRequest, type Portfolio } from './api';
   import { usePortfolio } from './composables/usePortfolio';
 
   const route = useRoute();
   const router = useRouter();
   const activeView = computed<'overview' | 'holdings'>(() =>
-    route.name === 'holdings' ? 'holdings' : 'overview',
+    route.name === 'portfolio-holdings' ? 'holdings' : 'overview',
   );
+  const activePortfolioId = computed<number | null>(() => {
+    if (route.name !== 'portfolio-overview' && route.name !== 'portfolio-holdings') return null;
+    const id = Number(route.params.portfolioId);
+    return Number.isInteger(id) && id > 0 ? id : null;
+  });
+  const portfolios = ref<Portfolio[]>([]);
+  const currentPortfolio = computed(() =>
+    portfolios.value.find((portfolio) => portfolio.id === activePortfolioId.value),
+  );
+  const portfolioName = computed(() => currentPortfolio.value?.name ?? 'Majątek');
   const showTransactionForm = ref(false);
   const showImportModal = ref(false);
   const {
@@ -39,7 +50,38 @@
     resetMarketSelection,
     updateQuotes,
     importPurchases,
-  } = usePortfolio();
+  } = usePortfolio(activePortfolioId);
+
+  const loadPortfolios = async () => {
+    try {
+      portfolios.value = await getPortfolios();
+    } catch (reason) {
+      error.value = reason instanceof Error ? reason.message : 'Nie udało się pobrać portfeli.';
+    }
+  };
+
+  const createPortfolio = async () => {
+    const name = window.prompt('Nazwa nowego portfela');
+    if (!name?.trim()) return;
+    try {
+      const portfolio = await createPortfolioRequest(name.trim());
+      await loadPortfolios();
+      await router.push(`/portfolios/${portfolio.id}`);
+    } catch (reason) {
+      error.value = reason instanceof Error ? reason.message : 'Nie udało się utworzyć portfela.';
+    }
+  };
+
+  const renamePortfolio = async (portfolio: Portfolio) => {
+    const name = window.prompt('Nowa nazwa portfela', portfolio.name);
+    if (!name?.trim() || name.trim() === portfolio.name) return;
+    try {
+      await renamePortfolioRequest(portfolio.id, name.trim());
+      await loadPortfolios();
+    } catch (reason) {
+      error.value = reason instanceof Error ? reason.message : 'Nie udało się zmienić nazwy portfela.';
+    }
+  };
 
   const submitPurchase = async () => {
     if (await submitTransaction()) showTransactionForm.value = false;
@@ -50,16 +92,23 @@
     await removeAllPositions();
   };
 
-  onMounted(loadData);
+  onMounted(loadPortfolios);
 </script>
 
 <template>
   <div class="app-shell">
-    <AppSidebar :active-view="activeView" :position-count="summary?.positions.length ?? 0" />
+    <AppSidebar
+      :portfolios="portfolios"
+      :active-portfolio-id="activePortfolioId"
+      @create-portfolio="createPortfolio"
+      @rename-portfolio="renamePortfolio"
+    />
     <main class="main-content">
       <AppHeader
         :active-view="activeView"
         :refreshing="refreshing"
+        :portfolio-name="portfolioName"
+        :has-portfolio="activePortfolioId !== null"
         @refresh="updateQuotes"
         @add-purchase="showTransactionForm = true"
         @import-purchases="showImportModal = true"
@@ -73,8 +122,10 @@
           :removing-all="removingAll"
           :history-dates="historyDates"
           :history-values="historyValues"
+          :is-aggregate="activePortfolioId === null"
           @add-purchase="showTransactionForm = true"
-          @show-holdings="router.push('/holdings')"
+          @create-portfolio="createPortfolio"
+          @show-holdings="activePortfolioId && router.push(`/portfolios/${activePortfolioId}/holdings`)"
           @remove-position="openRemovalForm"
           @remove-all="confirmRemoveAll"
         />

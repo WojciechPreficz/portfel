@@ -16,6 +16,17 @@ class InstrumentType(str, Enum):
     gold = "gold"
 
 
+class Portfolio(Base):
+    __tablename__ = "portfolios"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    transactions: Mapped[list["Transaction"]] = relationship(back_populates="portfolio")
+    deposits: Mapped[list["CashDeposit"]] = relationship(back_populates="portfolio")
+
+
 class TransactionType(str, Enum):
     BUY = "BUY"
     SELL = "SELL"
@@ -42,6 +53,7 @@ class Transaction(Base):
     __tablename__ = "transactions"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    portfolio_id: Mapped[int] = mapped_column(ForeignKey("portfolios.id"), index=True)
     instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"), index=True)
     type: Mapped[str] = mapped_column(String(8))
     quantity: Mapped[Decimal] = mapped_column(Numeric(18, 8))
@@ -52,16 +64,19 @@ class Transaction(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     instrument: Mapped[Instrument] = relationship(back_populates="transactions")
+    portfolio: Mapped[Portfolio] = relationship(back_populates="transactions")
 
 
 class CashDeposit(Base):
     __tablename__ = "cash_deposits"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    portfolio_id: Mapped[int] = mapped_column(ForeignKey("portfolios.id"), index=True)
     date: Mapped[date_type] = mapped_column(Date, index=True)
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 8))
     currency: Mapped[str] = mapped_column(String(3), default="PLN")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    portfolio: Mapped[Portfolio] = relationship(back_populates="deposits")
 
 
 class Price(Base):

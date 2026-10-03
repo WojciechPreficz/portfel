@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue';
+import { computed, ref, watch, type ComputedRef } from 'vue';
 import type { Instrument, PortfolioSummary, Position } from '../api';
 import { formatNumber } from '../utils/formatters';
 import { portfolioService } from '../services/portfolioService';
@@ -22,7 +22,7 @@ const emptyTransactionForm = (): TransactionForm => ({
   commission: '0',
 });
 
-export const usePortfolio = () => {
+export const usePortfolio = (portfolioId: ComputedRef<number | null>) => {
   const summary = ref<PortfolioSummary | null>(null);
   const instruments = ref<Instrument[]>([]);
   const loading = ref(true);
@@ -45,7 +45,7 @@ export const usePortfolio = () => {
     loading.value = true;
     error.value = '';
     try {
-      const [portfolio, history, catalog] = await portfolioService.loadSnapshot();
+      const [portfolio, history, catalog] = await portfolioService.loadSnapshot(portfolioId.value);
       summary.value = portfolio;
       instruments.value = catalog;
       historyDates.value = history.map((point) => point.date);
@@ -60,6 +60,7 @@ export const usePortfolio = () => {
   const submitTransaction = async () => {
     if (
       !form.value.marketType ||
+      portfolioId.value === null ||
       !form.value.instrumentId ||
       !form.value.quantity ||
       !form.value.price ||
@@ -67,7 +68,7 @@ export const usePortfolio = () => {
     )
       return false;
     try {
-      await portfolioService.buy({
+      await portfolioService.buy(portfolioId.value, {
         instrument_id: Number(form.value.instrumentId),
         quantity: Number(form.value.quantity),
         price: Number(form.value.price),
@@ -112,7 +113,8 @@ export const usePortfolio = () => {
     )
       return;
     try {
-      await portfolioService.sell({
+      if (portfolioId.value === null) return;
+      await portfolioService.sell(portfolioId.value, {
         instrument_id: position.instrument.id,
         quantity,
         price: position.price ?? 0,
@@ -135,7 +137,8 @@ export const usePortfolio = () => {
     if (!positions.length) return;
     removingAll.value = true;
     try {
-      const result = await portfolioService.clearPortfolio();
+      if (portfolioId.value === null) return;
+      const result = await portfolioService.clearPortfolio(portfolioId.value);
       notice.value = `Usunięto ${result.deleted_instruments} spółek oraz ${result.deleted_transactions} transakcji.`;
       await loadData();
     } catch (reason) {
@@ -169,10 +172,11 @@ export const usePortfolio = () => {
   };
 
   const importPurchases = async (file: File, source: 'xstation5' | 'bossa') => {
+    if (portfolioId.value === null) return;
     error.value = '';
     notice.value = 'Importuję zakupy...';
     try {
-      const result = await portfolioService.importPurchases(file, source);
+      const result = await portfolioService.importPurchases(file, source, portfolioId.value);
       if (result.errors.length) {
         error.value = result.errors.join('; ');
         notice.value = 'Import anulowany. Popraw wskazane wiersze i spróbuj ponownie.';
@@ -186,6 +190,8 @@ export const usePortfolio = () => {
       notice.value = '';
     }
   };
+
+  watch(portfolioId, loadData, { immediate: true });
 
   return {
     summary,

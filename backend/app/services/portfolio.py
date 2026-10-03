@@ -135,10 +135,15 @@ def portfolio_value_on(
     return total
 
 
-def build_summary(db: Session) -> dict:
+def build_summary(db: Session, portfolio_id: int | None = None) -> dict:
+    transaction_query = select(Transaction).options(selectinload(Transaction.instrument))
+    deposit_query = select(CashDeposit)
+    if portfolio_id is not None:
+        transaction_query = transaction_query.where(Transaction.portfolio_id == portfolio_id)
+        deposit_query = deposit_query.where(CashDeposit.portfolio_id == portfolio_id)
     transactions = list(
         db.scalars(
-            select(Transaction).options(selectinload(Transaction.instrument)).order_by(Transaction.date)
+            transaction_query.order_by(Transaction.date)
         ).all()
     )
     instruments = {i.id: i for i in db.scalars(select(Instrument)).all()}
@@ -198,18 +203,19 @@ def build_summary(db: Session) -> dict:
 
     positions.sort(key=lambda p: p["market_value_pln"], reverse=True)
     change_1d = total_value - total_prev
-    deposits = list(db.scalars(select(CashDeposit).order_by(CashDeposit.date, CashDeposit.id)).all())
+    deposits = list(db.scalars(deposit_query.order_by(CashDeposit.date, CashDeposit.id)).all())
     cash_flows = []
-    if deposits:
-        for deposit in deposits:
-            fx = fx_on(db, deposit.currency, deposit.date, fx_cache)
-            cash_flows.append((deposit.date, -_as_decimal(deposit.amount) * fx))
-    else:
-        for tx in transactions:
-            fx = fx_on(db, tx.currency, tx.date, fx_cache)
-            gross = _as_decimal(tx.quantity) * _as_decimal(tx.price) * fx
-            commission = _as_decimal(tx.commission) * fx
-            cash_flows.append((tx.date, -(gross + commission) if tx.type == "BUY" else gross - commission))
+    deposit_portfolio_ids = {deposit.portfolio_id for deposit in deposits}
+    for deposit in deposits:
+        fx = fx_on(db, deposit.currency, deposit.date, fx_cache)
+        cash_flows.append((deposit.date, -_as_decimal(deposit.amount) * fx))
+    for tx in transactions:
+        if tx.portfolio_id in deposit_portfolio_ids:
+            continue
+        fx = fx_on(db, tx.currency, tx.date, fx_cache)
+        gross = _as_decimal(tx.quantity) * _as_decimal(tx.price) * fx
+        commission = _as_decimal(tx.commission) * fx
+        cash_flows.append((tx.date, -(gross + commission) if tx.type == "BUY" else gross - commission))
     if total_value:
         cash_flows.append((as_of or today, total_value))
     annual_return = xirr(cash_flows)
@@ -227,8 +233,11 @@ def build_summary(db: Session) -> dict:
     }
 
 
-def build_history(db: Session) -> list[dict]:
-    transactions = list(db.scalars(select(Transaction).order_by(Transaction.date)).all())
+def build_history(db: Session, portfolio_id: int | None = None) -> list[dict]:
+    transaction_query = select(Transaction)
+    if portfolio_id is not None:
+        transaction_query = transaction_query.where(Transaction.portfolio_id == portfolio_id)
+    transactions = list(db.scalars(transaction_query.order_by(Transaction.date)).all())
     if not transactions:
         return []
     start = transactions[0].date

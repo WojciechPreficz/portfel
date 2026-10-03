@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
-from app.models import CashDeposit, Instrument, Transaction
+from app.models import CashDeposit, Instrument, Portfolio, Transaction
 from app.schemas import TransactionCreate, TransactionImportResult, TransactionOut
 from app.seed import GPW_STOCK_TICKERS, apply_instrument_defaults
 from app.services.portfolio import _signed_qty
@@ -60,12 +60,23 @@ def create_transaction(payload: TransactionCreate, db: Session = Depends(get_db)
     if payload.type not in {"BUY", "SELL"}:
         raise HTTPException(400, "Typ musi być BUY lub SELL")
     instrument = _get_or_create_instrument(db, payload)
+    portfolio_id = payload.portfolio_id
+    if portfolio_id is None:
+        portfolio_id = db.scalar(select(Portfolio.id).order_by(Portfolio.id).limit(1))
+    if portfolio_id is None or not db.get(Portfolio, portfolio_id):
+        raise HTTPException(400, "Nieznany portfel")
     if payload.type == "SELL":
-        existing = db.scalars(select(Transaction).where(Transaction.instrument_id == instrument.id)).all()
+        existing = db.scalars(
+            select(Transaction).where(
+                Transaction.portfolio_id == portfolio_id,
+                Transaction.instrument_id == instrument.id,
+            )
+        ).all()
         qty = sum((_signed_qty(tx) for tx in existing), Decimal("0"))
         if payload.quantity > qty:
             raise HTTPException(400, "Sprzedaż większa niż posiadana ilość")
     tx = Transaction(
+        portfolio_id=portfolio_id,
         instrument_id=instrument.id,
         type=payload.type,
         quantity=payload.quantity,
@@ -87,8 +98,13 @@ def create_transaction(payload: TransactionCreate, db: Session = Depends(get_db)
 def import_transactions(
     file: UploadFile = File(...),
     source: str = Form("xstation5"),
+    portfolio_id: int | None = Form(None),
     db: Session = Depends(get_db),
 ):
+    if portfolio_id is None:
+        portfolio_id = db.scalar(select(Portfolio.id).order_by(Portfolio.id).limit(1))
+    if portfolio_id is None or not db.get(Portfolio, portfolio_id):
+        raise HTTPException(400, "Nieznany portfel")
     if source not in {"xstation5", "bossa"}:
         raise HTTPException(400, "Nieznane źródło importu")
     expected_extension = ".xlsx" if source == "xstation5" else ".csv"
@@ -150,6 +166,7 @@ def import_transactions(
                 errors.append(f"wiersz {purchase['row_number']}: nie znaleziono instrumentu {purchase['ticker'] or purchase['isin']}")
                 continue
         transactions.append(Transaction(
+            portfolio_id=portfolio_id,
             instrument_id=instrument.id,
             type=purchase.get("type", "BUY"),
             quantity=purchase["quantity"],
@@ -163,6 +180,7 @@ def import_transactions(
     db.add_all(transactions)
     db.add_all(
         CashDeposit(
+            portfolio_id=portfolio_id,
             date=deposit["date"],
             amount=deposit["amount"],
             currency=deposit["currency"],

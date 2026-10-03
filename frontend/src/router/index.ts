@@ -6,7 +6,8 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', name: 'overview', component: DashboardOverview },
-    { path: '/holdings', name: 'holdings', component: HoldingsView },
+    { path: '/portfolios/:portfolioId', name: 'portfolio-overview', component: DashboardOverview },
+    { path: '/portfolios/:portfolioId/holdings', name: 'portfolio-holdings', component: HoldingsView },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 });

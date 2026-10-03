@@ -82,6 +82,7 @@ button {
   display: grid;
   gap: 5px;
 }
+.nav-list .nav-link,
 .nav-list button {
   display: flex;
   justify-content: space-between;
@@ -93,18 +94,57 @@ button {
   border-radius: 5px;
   font-size: 13px;
 }
-.nav-list button span {
+.nav-list .nav-link span {
   color: #68746a;
   font-family: 'DM Mono', monospace;
   font-size: 11px;
 }
-.nav-list button.active {
+.nav-list .nav-link.active {
   color: #17201b;
   background: #c2ec62;
   font-weight: 700;
 }
-.nav-list button.active span {
+.nav-list .nav-link.active span {
   color: #536a2b;
+}
+.portfolio-nav {
+  display: grid;
+  gap: 4px;
+  max-height: 45vh;
+  overflow-y: auto;
+}
+.portfolio-nav-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.portfolio-nav-row .nav-link {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rename-portfolio {
+  padding: 8px 5px;
+  border: 0;
+  background: transparent;
+  color: #859086;
+  font-size: 10px;
+}
+.new-portfolio-button {
+  margin: 10px 10px 0;
+  padding: 10px;
+  border: 1px solid #465148;
+  border-radius: 4px;
+  background: transparent;
+  color: #d4e2cf;
+  text-align: left;
+  font-size: 12px;
+}
+.new-portfolio-button:hover {
+  border-color: #c2ec62;
+  color: #c2ec62;
 }
 .sidebar-bottom {
   margin-top: auto;
@@ -642,10 +682,45 @@ footer {
     display: flex;
     margin-left: auto;
   }
-  .nav-list button {
-    padding: 8px;
+  .sidebar {
+    display: block;
   }
-  .nav-list button span {
+  .brand {
+    margin-bottom: 14px;
+  }
+  .nav-list {
+    display: block;
+    margin: 0;
+  }
+  .nav-list > .nav-link {
+    display: inline-flex;
+    padding: 8px 10px;
+  }
+  .sidebar-label {
+    display: block;
+    margin: 12px 10px 6px;
+  }
+  .portfolio-nav {
+    display: flex;
+    max-height: none;
+    overflow-x: auto;
+    gap: 4px;
+  }
+  .portfolio-nav-row {
+    flex: 0 0 auto;
+  }
+  .portfolio-nav-row .nav-link {
+    max-width: 170px;
+    padding: 8px 10px;
+  }
+  .rename-portfolio {
+    padding: 8px 7px;
+  }
+  .new-portfolio-button {
+    margin: 7px 0 0;
+    padding: 7px 10px;
+  }
+  .nav-list .nav-link span {
     display: none;
   }
   .main-content {
