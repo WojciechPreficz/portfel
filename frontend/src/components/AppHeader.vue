@@ -1,15 +1,20 @@
 <script setup lang="ts">
+  import type { Portfolio } from '../api';
+
   defineProps<{
     activeView: 'overview' | 'holdings';
     refreshing: boolean;
     portfolioName: string;
     hasPortfolio: boolean;
+    portfolio: Portfolio | undefined;
   }>();
 
   const emit = defineEmits<{
     refresh: [];
     addPurchase: [];
     importPurchases: [];
+    renamePortfolio: [portfolio: Portfolio];
+    deletePortfolio: [portfolio: Portfolio];
   }>();
 
   const currentDateLabel = new Intl.DateTimeFormat('pl-PL', {
@@ -36,6 +41,12 @@
         ><button class="button button-quiet" @click="$emit('importPurchases')">Importuj zakupy</button
         ><button class="button button-primary" @click="$emit('addPurchase')">+ Dodaj zakup</button></template
       >
+      <div v-if="portfolio" class="portfolio-actions">
+        <button class="portfolio-action" @click="$emit('renamePortfolio', portfolio)">Zmień nazwę</button>
+        <button class="portfolio-action portfolio-action-delete" @click="$emit('deletePortfolio', portfolio)">
+          Usuń portfel
+        </button>
+      </div>
     </div>
   </header>
 </template>

@@ -72,6 +72,8 @@ export const createPortfolio = (name: string) =>
   api<Portfolio>('/api/portfolios', { method: 'POST', body: JSON.stringify({ name }) });
 export const renamePortfolio = (id: number, name: string) =>
   api<Portfolio>(`/api/portfolios/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) });
+export const deletePortfolio = (id: number) =>
+  api<{ deleted_portfolio: number }>(`/api/portfolios/${id}`, { method: 'DELETE' });
 export const getPortfolio = (portfolioId: number | null) =>
   api<PortfolioSummary>(`/api/portfolio/summary${portfolioQuery(portfolioId)}`);
 export const getHistory = (portfolioId: number | null) =>

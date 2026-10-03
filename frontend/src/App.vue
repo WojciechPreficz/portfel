@@ -7,7 +7,7 @@
   import PortfolioAlerts from './components/PortfolioAlerts.vue';
   import RemovalModal from './components/RemovalModal.vue';
   import TransactionModal from './components/TransactionModal.vue';
-  import { createPortfolio as createPortfolioRequest, getPortfolios, renamePortfolio as renamePortfolioRequest, type Portfolio } from './api';
+  import { createPortfolio as createPortfolioRequest, deletePortfolio as deletePortfolioRequest, getPortfolios, renamePortfolio as renamePortfolioRequest, type Portfolio } from './api';
   import { usePortfolio } from './composables/usePortfolio';
 
   const route = useRoute();
@@ -83,6 +83,25 @@
     }
   };
 
+  const deletePortfolio = async (portfolio: Portfolio) => {
+    const confirmed = window.confirm(
+      `Usunięcie portfela "${portfolio.name}" trwale usunie wszystkie jego transakcje i wpłaty. Kontynuować?`,
+    );
+    if (!confirmed) return;
+    try {
+      await deletePortfolioRequest(portfolio.id);
+      await loadPortfolios();
+      if (activePortfolioId.value === portfolio.id) {
+        await router.push('/');
+        await loadData();
+      } else if (activePortfolioId.value === null) {
+        await loadData();
+      }
+    } catch (reason) {
+      error.value = reason instanceof Error ? reason.message : 'Nie udało się usunąć portfela.';
+    }
+  };
+
   const submitPurchase = async () => {
     if (await submitTransaction()) showTransactionForm.value = false;
   };
@@ -101,7 +120,6 @@
       :portfolios="portfolios"
       :active-portfolio-id="activePortfolioId"
       @create-portfolio="createPortfolio"
-      @rename-portfolio="renamePortfolio"
     />
     <main class="main-content">
       <AppHeader
@@ -109,9 +127,12 @@
         :refreshing="refreshing"
         :portfolio-name="portfolioName"
         :has-portfolio="activePortfolioId !== null"
+        :portfolio="currentPortfolio"
         @refresh="updateQuotes"
         @add-purchase="showTransactionForm = true"
         @import-purchases="showImportModal = true"
+        @rename-portfolio="renamePortfolio"
+        @delete-portfolio="deletePortfolio"
       />
       <PortfolioAlerts :error="error" :notice="notice" @retry="loadData" />
       <RouterView v-slot="{ Component }">

@@ -8,7 +8,6 @@
 
   defineEmits<{
     createPortfolio: [];
-    renamePortfolio: [portfolio: Portfolio];
   }>();
 </script>
 
@@ -29,14 +28,6 @@
           >
             {{ portfolio.name }}
           </RouterLink>
-          <button
-            class="rename-portfolio"
-            :aria-label="`Zmień nazwę portfela ${portfolio.name}`"
-            :title="`Zmień nazwę: ${portfolio.name}`"
-            @click="$emit('renamePortfolio', portfolio)"
-          >
-            Edytuj
-          </button>
         </div>
       </div>
       <button class="new-portfolio-button" @click="$emit('createPortfolio')">+ Nowy portfel</button>

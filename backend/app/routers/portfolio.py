@@ -40,6 +40,17 @@ def rename_portfolio(portfolio_id: int, payload: PortfolioCreate, db: Session = 
     return portfolio
 
 
+@portfolios_router.delete("/{portfolio_id}")
+def delete_portfolio(portfolio_id: int, db: Session = Depends(get_db)):
+    portfolio = db.get(Portfolio, portfolio_id)
+    if not portfolio:
+        raise HTTPException(404, "Portfel nie istnieje")
+    result = _delete_portfolio_data(db, portfolio_id)
+    db.delete(portfolio)
+    db.commit()
+    return {"deleted_portfolio": portfolio_id, **result}
+
+
 @router.get("/summary", response_model=PortfolioSummary)
 def summary(portfolio_id: int | None = None, db: Session = Depends(get_db)):
     return build_summary(db, portfolio_id)
@@ -52,12 +63,17 @@ def history(portfolio_id: int | None = None, db: Session = Depends(get_db)):
 
 @router.delete("/holdings")
 def delete_holdings(portfolio_id: int, db: Session = Depends(get_db)):
+    result = _delete_portfolio_data(db, portfolio_id)
+    db.commit()
+    return result
+
+
+def _delete_portfolio_data(db: Session, portfolio_id: int):
     deleted_deposits = db.query(CashDeposit).filter(CashDeposit.portfolio_id == portfolio_id).delete()
     instrument_ids = db.scalars(
         select(Transaction.instrument_id).where(Transaction.portfolio_id == portfolio_id).distinct()
     ).all()
     if not instrument_ids:
-        db.commit()
         return {"deleted_instruments": 0, "deleted_transactions": 0, "deleted_prices": 0, "deleted_deposits": deleted_deposits}
 
     deleted_transactions = db.execute(
@@ -77,7 +93,6 @@ def delete_holdings(portfolio_id: int, db: Session = Depends(get_db)):
     deleted_instruments = db.execute(
         delete(Instrument).where(Instrument.id.in_(unused_instrument_ids))
     ).rowcount
-    db.commit()
     return {
         "deleted_instruments": deleted_instruments,
         "deleted_transactions": deleted_transactions,

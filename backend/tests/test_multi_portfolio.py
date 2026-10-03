@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.database import Base
 from app.models import CashDeposit, Instrument, Portfolio, Price, Transaction
-from app.routers.portfolio import delete_holdings
+from app.routers.portfolio import delete_holdings, delete_portfolio
 from app.services.portfolio import build_summary, xirr
 
 
@@ -81,6 +81,25 @@ class MultiPortfolioTest(unittest.TestCase):
         self.assertEqual(result["deleted_prices"], 0)
         self.assertEqual(len(self.db.scalars(select(Price)).all()), 1)
         self.assertEqual(build_summary(self.db, self.second.id)["positions"][0]["quantity"], Decimal("3"))
+
+    def test_deleting_portfolio_removes_its_data_and_updates_aggregate(self):
+        first_id = self.first.id
+        self.db.add(CashDeposit(
+            portfolio_id=first_id,
+            date=date.today(),
+            amount=Decimal("100"),
+            currency="PLN",
+        ))
+        self.db.commit()
+
+        result = delete_portfolio(first_id, self.db)
+
+        self.assertEqual(result["deleted_portfolio"], first_id)
+        self.assertIsNone(self.db.get(Portfolio, first_id))
+        self.assertEqual(self.db.scalars(select(Transaction).where(Transaction.portfolio_id == first_id)).all(), [])
+        self.assertEqual(self.db.scalars(select(CashDeposit).where(CashDeposit.portfolio_id == first_id)).all(), [])
+        self.assertEqual(len(self.db.scalars(select(Price)).all()), 1)
+        self.assertEqual(build_summary(self.db)["positions"][0]["quantity"], Decimal("3"))
 
     def test_aggregate_return_includes_transactions_for_portfolios_without_deposits(self):
         start = date.today() - timedelta(days=30)
