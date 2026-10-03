@@ -24,6 +24,9 @@ class TransactionImportTest(unittest.TestCase):
         self.assertEqual(purchases[0]["price"], Decimal("130.307"))
         self.assertEqual(purchases[0]["commission"], Decimal("49.88"))
         self.assertEqual(purchases[0]["type"], "BUY")
+        self.assertEqual(purchases[0]["ticker"], "V80A")
+        self.assertEqual(purchases[0]["raw_ticker"], "V80A.AS")
+        self.assertEqual(purchases[0]["isin"], "IE00BMVB5R75")
         self.assertEqual(purchases[1]["type"], "SELL")
 
     def test_xstation_cash_operations_reads_deposits(self):

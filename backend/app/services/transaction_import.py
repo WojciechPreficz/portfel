@@ -26,6 +26,14 @@ STOCK_SPLITS = {
     "AVGO": ((date(2024, 7, 15), Decimal("10")),),
 }
 
+BOSSA_INSTRUMENTS = {
+    "vanguard lifestrategy 80 equity ucits etf": {
+        "ticker": "V80A",
+        "raw_ticker": "V80A.AS",
+        "isin": "IE00BMVB5R75",
+    },
+}
+
 
 def _normalise(value: object) -> str:
     text = str(value or "").strip().lower()
@@ -209,14 +217,15 @@ def read_bossa_purchases(content: bytes) -> tuple[list[dict], list[str]]:
             name = row[headers["walor"]].strip()
             if not name:
                 raise ValueError(f"wiersz {row_number}: brak pola instrument")
+            instrument_match = BOSSA_INSTRUMENTS.get(_normalise(name), {})
             purchases.append({
                 "row_number": row_number,
                 "date": _date(row[headers["data"]], row_number),
-                "ticker": None,
-                "raw_ticker": None,
+                "ticker": instrument_match.get("ticker"),
+                "raw_ticker": instrument_match.get("raw_ticker"),
                 "name": name,
                 "category": "etf",
-                "isin": None,
+                "isin": instrument_match.get("isin"),
                 "quantity": quantity,
                 "price": price,
                 "currency": row[headers["waluta"]].strip().upper(),

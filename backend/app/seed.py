@@ -86,7 +86,7 @@ POLISH_MARKET_INSTRUMENTS = {
     "etf": [
         {"ticker": "MEU", "name": "Core STOXX Europe 600", "type": "etf", "currency": "EUR", "provider": "yahoo", "symbol": "MEUD.MI", "unit": "share"},
         {"ticker": "C6E", "isin": "LU0908500753", "name": "Amundi Core Stoxx Europe 600 UCITS ETF Acc EUR", "type": "etf", "currency": "EUR", "provider": "yahoo", "symbol": "LYP6.DE", "unit": "share"},
-        {"ticker": "V80A", "isin": "IE00BMVB5R75", "name": "Vanguard LifeStrategy 80% Equity UCITS ETF Acc EUR", "type": "etf", "currency": "EUR", "provider": "yahoo", "symbol": "V80A.DE", "unit": "share"},
+        {"ticker": "V80A", "isin": "IE00BMVB5R75", "name": "Vanguard LifeStrategy 80% Equity UCITS ETF Acc EUR", "type": "etf", "currency": "EUR", "provider": "yahoo", "symbol": "V80A.AS", "unit": "share"},
         {"ticker": "SPY", "name": "SPDR S&P 500 ETF Trust", "type": "etf", "currency": "USD", "provider": "yahoo", "symbol": "SPY", "unit": "share"},
         {"ticker": "QQQ", "name": "Invesco NASDAQ 100 ETF", "type": "etf", "currency": "USD", "provider": "yahoo", "symbol": "QQQ", "unit": "share"},
         {"ticker": "IVV", "name": "iShares Core S&P 500 ETF", "type": "etf", "currency": "USD", "provider": "yahoo", "symbol": "IVV", "unit": "share"},

@@ -147,6 +147,9 @@ def import_transactions(
             instrument.provider = "stooq"
             instrument.symbol = purchase["ticker"].lower()
             instrument.unit = "share"
+        if instrument and (purchase.get("raw_ticker") or "").endswith(".AS"):
+            instrument.provider = "yahoo"
+            instrument.symbol = purchase["raw_ticker"]
         if not instrument:
             raw_ticker = purchase.get("raw_ticker") or ""
             category = purchase.get("category")
@@ -160,6 +163,8 @@ def import_transactions(
                     "provider": "yahoo" if instrument_type in {"stock_us", "etf"} else "stooq",
                 })
                 instrument = Instrument(**data)
+                if raw_ticker.endswith(".AS"):
+                    instrument.symbol = raw_ticker
                 db.add(instrument)
                 db.flush()
             else:

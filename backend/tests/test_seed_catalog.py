@@ -22,6 +22,8 @@ class SeedCatalogTest(unittest.TestCase):
         etf_tickers = {row["ticker"] for row in POLISH_MARKET_INSTRUMENTS["etf"]}
         self.assertIn("C6E", etf_tickers)
         self.assertIn("V80A", etf_tickers)
+        v80a = next(row for row in POLISH_MARKET_INSTRUMENTS["etf"] if row["ticker"] == "V80A")
+        self.assertEqual(v80a["symbol"], "V80A.AS")
 
     def test_meu_uses_yahoo_exchange_symbol(self):
         instrument = apply_instrument_defaults({"ticker": "MEU", "type": "etf"})
