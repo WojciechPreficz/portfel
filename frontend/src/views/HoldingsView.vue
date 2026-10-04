@@ -13,10 +13,12 @@
     summary: PortfolioSummary | null;
     loading: boolean;
     removingAll: boolean;
+    isAggregate: boolean;
   }>();
 
   const emit = defineEmits<{
     addPurchase: [];
+    createPortfolio: [];
     removePosition: [position: Position, removeAll: boolean];
     removeAll: [];
   }>();
@@ -73,13 +75,15 @@
   <section class="panel holdings-view">
     <div class="section-heading">
       <div>
-        <p class="panel-kicker">PORTFEL / {{ summary?.positions.length ?? 0 }} POZYCJI</p>
+        <p class="panel-kicker">
+          {{ isAggregate ? 'MAJĄTEK' : 'PORTFEL' }} / {{ summary?.positions.length ?? 0 }} POZYCJI
+        </p>
         <h2>Wszystkie pozycje</h2>
       </div>
       <div class="section-heading-actions">
         <span class="total-caption">Łącznie {{ formatCurrency(summary?.value_pln) }}</span>
         <button
-          v-if="summary?.positions.length"
+          v-if="!isAggregate && summary?.positions.length"
           class="text-button text-button-danger"
           :disabled="removingAll"
           @click="$emit('removeAll')"
@@ -96,7 +100,12 @@
       <div class="empty-icon">+</div>
       <h3>Nie ma jeszcze żadnych pozycji</h3>
       <p>Pierwszy zakup pojawi się tutaj wraz z wyceną.</p>
-      <button class="button button-primary" @click="$emit('addPurchase')">Dodaj zakup</button>
+      <button
+        class="button button-primary"
+        @click="isAggregate ? $emit('createPortfolio') : $emit('addPurchase')"
+      >
+        {{ isAggregate ? 'Utwórz portfel' : 'Dodaj zakup' }}
+      </button>
     </div>
     <div v-else class="table-wrap">
       <table>
@@ -148,7 +157,7 @@
                 Wynik <span>{{ sortIndicator('pnl_pln') }}</span>
               </button>
             </th>
-            <th>Akcje</th>
+            <th v-if="!isAggregate">Akcje</th>
           </tr>
         </thead>
         <tbody>
@@ -175,7 +184,7 @@
               {{ formatCurrency(position.pnl_pln)
               }}<small>{{ formatPercent(position.pnl_pct) }}</small>
             </td>
-            <td>
+            <td v-if="!isAggregate">
               <div class="table-actions">
                 <button class="text-button" @click="$emit('removePosition', position, false)">
                   Usuń część

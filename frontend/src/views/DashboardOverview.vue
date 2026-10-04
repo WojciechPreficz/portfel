@@ -152,7 +152,7 @@
           <p class="panel-kicker">NAJWIĘKSZE POZYCJE</p>
           <h2>{{ isAggregate ? 'Co masz w portfelach' : 'Co masz w portfelu' }}</h2>
         </div>
-        <button v-if="!isAggregate" class="text-button" @click="$emit('showHoldings')">Zobacz wszystkie →</button>
+        <button class="text-button" @click="$emit('showHoldings')">Zobacz wszystkie →</button>
       </div>
       <div v-if="!summary?.positions.length && !loading" class="empty-state">
         <div class="empty-icon">+</div>

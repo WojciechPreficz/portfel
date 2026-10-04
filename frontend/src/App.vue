@@ -13,7 +13,9 @@
   const route = useRoute();
   const router = useRouter();
   const activeView = computed<'overview' | 'holdings'>(() =>
-    route.name === 'portfolio-holdings' ? 'holdings' : 'overview',
+    route.name === 'portfolio-holdings' || route.name === 'aggregate-holdings'
+      ? 'holdings'
+      : 'overview',
   );
   const activePortfolioId = computed<number | null>(() => {
     if (route.name !== 'portfolio-overview' && route.name !== 'portfolio-holdings') return null;
@@ -146,7 +148,7 @@
           :is-aggregate="activePortfolioId === null"
           @add-purchase="showTransactionForm = true"
           @create-portfolio="createPortfolio"
-          @show-holdings="activePortfolioId && router.push(`/portfolios/${activePortfolioId}/holdings`)"
+          @show-holdings="router.push(activePortfolioId ? `/portfolios/${activePortfolioId}/holdings` : '/holdings')"
           @remove-position="openRemovalForm"
           @remove-all="confirmRemoveAll"
         />
