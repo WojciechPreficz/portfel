@@ -6,7 +6,7 @@
     formatNumber,
     formatPercent,
     formatPrice,
-    isPositive,
+    trendClass,
   } from '../utils/formatters';
 
   const props = defineProps<{
@@ -97,11 +97,13 @@
       const positions = groups.get(key) ?? [];
       if (!positions.length) return [];
 
-      const value = positions.reduce(
-        (total, position) => total + numericValue(position.market_value_pln),
-        0,
-      );
-      const pnl = positions.reduce((total, position) => total + numericValue(position.pnl_pln), 0);
+      const hasMissingPrices = positions.some((position) => position.market_value_pln == null);
+      const value = hasMissingPrices
+        ? null
+        : positions.reduce((total, position) => total + numericValue(position.market_value_pln), 0);
+      const pnl = hasMissingPrices
+        ? null
+        : positions.reduce((total, position) => total + numericValue(position.pnl_pln), 0);
       const cost = positions.reduce(
         (total, position) => total + numericValue(position.cost_pln),
         0,
@@ -115,8 +117,8 @@
           positions,
           value,
           pnl,
-          pnlPct: cost !== 0 ? (pnl / cost) * 100 : null,
-          sharePct: portfolioValue !== 0 ? (value / portfolioValue) * 100 : null,
+          pnlPct: pnl != null && cost !== 0 ? (pnl / cost) * 100 : null,
+          sharePct: value != null && portfolioValue !== 0 ? (value / portfolioValue) * 100 : null,
         },
       ];
     });
@@ -182,7 +184,7 @@
             <small
               >({{ group.sharePct === null ? '--' : `${formatNumber(group.sharePct)}%` }})</small
             >
-            <span :class="isPositive(group.pnl) ? 'positive' : 'negative'">
+            <span :class="trendClass(group.pnl)">
               {{ formatCurrency(group.pnl) }}
               <small>({{ formatPercent(group.pnlPct) }})</small>
             </span>
@@ -261,7 +263,7 @@
                   <strong>{{ formatCurrency(position.market_value_pln) }}</strong>
                 </td>
                 <td>{{ formatPercent(position.weight_pct) }}</td>
-                <td :class="isPositive(position.pnl_pln) ? 'positive' : 'negative'">
+                <td :class="trendClass(position.pnl_pln)">
                   {{ formatCurrency(position.pnl_pln)
                   }}<small>{{ formatPercent(position.pnl_pct) }}</small>
                 </td>

@@ -158,6 +158,7 @@ def build_summary(db: Session, portfolio_id: int | None = None) -> dict:
     total_value = ZERO
     total_prev = ZERO
     total_cost = ZERO
+    has_missing_prices = False
     as_of = None
 
     for instrument_id, txs in grouped.items():
@@ -173,16 +174,36 @@ def build_summary(db: Session, portfolio_id: int | None = None) -> dict:
             as_of = price_date
         currency = px.currency if px else instrument.currency
         fx = fx_on(db, currency, today, fx_cache)
-        market = (qty * price * fx) if price is not None else ZERO
+        market = (qty * price * fx) if price is not None else None
         prev_price = _as_decimal(prev_px.close) if prev_px else price
         prev_fx = fx_on(db, prev_px.currency if prev_px else currency, today - timedelta(days=1), fx_cache)
-        prev_value = qty * (prev_price or ZERO) * prev_fx if prev_price is not None else market
-        change_1d = market - prev_value
-        change_1d_pct = (change_1d / prev_value * HUNDRED) if prev_value else None
-        pnl = market - cost_pln
-        pnl_pct = (pnl / cost_pln * HUNDRED) if cost_pln else None
-        total_value += market
-        total_prev += prev_value
+        prev_value = (
+            qty * (prev_price or ZERO) * prev_fx
+            if prev_price is not None
+            else None
+        )
+        change_1d = (
+            market - prev_value
+            if market is not None and prev_value is not None
+            else None
+        )
+        change_1d_pct = (
+            change_1d / prev_value * HUNDRED
+            if change_1d is not None and prev_value
+            else None
+        )
+        pnl = market - cost_pln if market is not None else None
+        pnl_pct = (
+            pnl / cost_pln * HUNDRED
+            if pnl is not None and cost_pln
+            else None
+        )
+        if market is None:
+            has_missing_prices = True
+        else:
+            total_value += market
+        if prev_value is not None:
+            total_prev += prev_value
         total_cost += cost_pln
         positions.append(
             {
@@ -202,10 +223,16 @@ def build_summary(db: Session, portfolio_id: int | None = None) -> dict:
         )
 
     for pos in positions:
-        pos["weight_pct"] = (pos["market_value_pln"] / total_value * HUNDRED) if total_value else ZERO
+        pos["weight_pct"] = (
+            (pos["market_value_pln"] / total_value * HUNDRED)
+            if not has_missing_prices and total_value and pos["market_value_pln"] is not None
+            else None
+        )
 
-    positions.sort(key=lambda p: p["market_value_pln"], reverse=True)
-    change_1d = total_value - total_prev
+    positions.sort(key=lambda p: p["market_value_pln"] or ZERO, reverse=True)
+    value = None if has_missing_prices else total_value
+    value_prev = None if has_missing_prices else total_prev
+    change_1d = value - value_prev if value is not None and value_prev is not None else None
     deposits = list(db.scalars(deposit_query.order_by(CashDeposit.date, CashDeposit.id)).all())
     cash_flows = []
     deposit_portfolio_ids = {deposit.portfolio_id for deposit in deposits}
@@ -223,17 +250,17 @@ def build_summary(db: Session, portfolio_id: int | None = None) -> dict:
         )
         commission = _as_decimal(tx.commission) * fx
         cash_flows.append((tx.date, -(gross + commission) if tx.type == "BUY" else gross - commission))
-    if total_value:
-        cash_flows.append((as_of or today, total_value))
-    annual_return = xirr(cash_flows)
+    if value:
+        cash_flows.append((as_of or today, value))
+    annual_return = xirr(cash_flows) if not has_missing_prices else None
     return {
-        "value_pln": total_value,
-        "value_prev_pln": total_prev,
+        "value_pln": value,
+        "value_prev_pln": value_prev,
         "change_1d_pln": change_1d,
-        "change_1d_pct": (change_1d / total_prev * HUNDRED) if total_prev else None,
+        "change_1d_pct": (change_1d / value_prev * HUNDRED) if change_1d is not None and value_prev else None,
         "cost_pln": total_cost,
-        "pnl_pln": total_value - total_cost,
-        "pnl_pct": ((total_value - total_cost) / total_cost * HUNDRED) if total_cost else None,
+        "pnl_pln": value - total_cost if value is not None else None,
+        "pnl_pct": ((value - total_cost) / total_cost * HUNDRED) if value is not None and total_cost else None,
         "xirr_pct": annual_return * HUNDRED if annual_return is not None else None,
         "as_of": as_of,
         "positions": positions,

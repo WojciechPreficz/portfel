@@ -5,7 +5,7 @@
   import { LineChart, PieChart } from 'echarts/charts';
   import { CanvasRenderer } from 'echarts/renderers';
   import VChart from 'vue-echarts';
-  import { formatCurrency, formatPercent, isPositive } from '../utils/formatters';
+  import { formatCurrency, formatPercent, trendClass } from '../utils/formatters';
   import type { PortfolioSummary } from '../api';
 
   use([CanvasRenderer, LineChart, PieChart, GridComponent, LegendComponent, TooltipComponent]);
@@ -80,6 +80,10 @@
     ],
     color: ['#17201b', '#b9e85d', '#ee806d', '#8cb7a4', '#d8ae57'],
   }));
+
+  const hasUnpricedPositions = computed(() =>
+    (props.summary?.positions ?? []).some((position) => position.market_value_pln == null),
+  );
 </script>
 
 <template>
@@ -90,7 +94,13 @@
         <div v-if="loading" class="skeleton skeleton-xl"></div>
         <strong v-else>{{ formatCurrency(summary?.value_pln) }}</strong>
         <p class="metric-sub">
-          {{ summary?.as_of ? `Wycena z ${summary.as_of}` : 'Brak aktualnych notowań' }}
+          {{
+            summary?.value_pln == null
+              ? 'Brakuje notowań dla części pozycji'
+              : summary.as_of
+                ? `Wycena z ${summary.as_of}`
+                : 'Brak aktualnych notowań'
+          }}
         </p>
       </div>
       <div class="hero-orbit"><span></span><span></span><span></span></div>
@@ -98,27 +108,27 @@
     <div class="metric-card panel">
       <p class="panel-kicker">ZMIANA 1D</p>
       <div v-if="loading" class="skeleton skeleton-lg"></div>
-      <strong v-else :class="isPositive(summary?.change_1d_pln) ? 'positive' : 'negative'">{{
+      <strong v-else :class="trendClass(summary?.change_1d_pln)">{{
         formatCurrency(summary?.change_1d_pln)
       }}</strong>
-      <p :class="['metric-sub', isPositive(summary?.change_1d_pct) ? 'positive' : 'negative']">
+      <p :class="['metric-sub', trendClass(summary?.change_1d_pct)]">
         {{ formatPercent(summary?.change_1d_pct) }}
       </p>
     </div>
     <div class="metric-card panel">
       <p class="panel-kicker">P/L NIEZREALIZOWANY</p>
       <div v-if="loading" class="skeleton skeleton-lg"></div>
-      <strong v-else :class="isPositive(summary?.pnl_pln) ? 'positive' : 'negative'">{{
+      <strong v-else :class="trendClass(summary?.pnl_pln)">{{
         formatCurrency(summary?.pnl_pln)
       }}</strong>
-      <p :class="['metric-sub', isPositive(summary?.pnl_pct) ? 'positive' : 'negative']">
+      <p :class="['metric-sub', trendClass(summary?.pnl_pct)]">
         {{ formatPercent(summary?.pnl_pct) }} od zakupu
       </p>
     </div>
     <div class="metric-card panel">
       <p class="panel-kicker">XIRR ROCZNY</p>
       <div v-if="loading" class="skeleton skeleton-lg"></div>
-      <strong v-else :class="isPositive(summary?.xirr_pct) ? 'positive' : 'negative'">{{
+      <strong v-else :class="trendClass(summary?.xirr_pct)">{{
         formatPercent(summary?.xirr_pct)
       }}</strong>
       <p class="metric-sub">Zwrot ważony czasem</p>
@@ -144,6 +154,9 @@
         </div>
       </div>
       <div v-if="!summary?.positions.length && !loading" class="empty-allocation">Brak pozycji</div>
+      <div v-else-if="hasUnpricedPositions" class="empty-allocation">
+        Alokacja niedostępna — brakuje notowań.
+      </div>
       <VChart v-else class="allocation-chart" :option="allocationOption" autoresize />
     </section>
     <section class="panel positions-panel">
@@ -181,7 +194,7 @@
           </div>
           <div class="position-value">
             <strong>{{ formatCurrency(position.market_value_pln) }}</strong
-            ><span :class="isPositive(position.pnl_pln) ? 'positive' : 'negative'">{{
+            ><span :class="trendClass(position.pnl_pln)">{{
               formatCurrency(position.pnl_pln)
             }}</span>
           </div>

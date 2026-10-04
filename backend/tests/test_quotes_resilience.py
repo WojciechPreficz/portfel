@@ -66,6 +66,23 @@ class YahooAdapterTest(unittest.TestCase):
         self.assertIn("/MEUD.MI", get.call_args.args[0])
 
     @patch("app.services.adapters.yahoo.httpx.get")
+    def test_legacy_polish_tickers_use_current_yahoo_listings(self, get):
+        get.return_value = Mock(status_code=404)
+
+        for legacy_symbol, yahoo_symbol in (
+            ("DEBICA.WA", "DBC.WA"),
+            ("ASSECOPOL.WA", "ACP.WA"),
+            ("ASSECCOPOL.WA", "ACP.WA"),
+        ):
+            with self.subTest(legacy_symbol=legacy_symbol):
+                points = YahooAdapter().fetch_history(
+                    legacy_symbol, date(2026, 9, 22), date(2026, 9, 23), "PLN"
+                )
+
+                self.assertEqual(points, [])
+                self.assertIn(f"/{yahoo_symbol}", get.call_args.args[0])
+
+    @patch("app.services.adapters.yahoo.httpx.get")
     def test_current_market_price_is_used_when_available(self, get):
         get.return_value = Mock(
             status_code=200,

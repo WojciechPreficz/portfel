@@ -82,21 +82,21 @@ class PositionOut(BaseModel):
     cost_pln: Decimal
     price: Decimal | None
     price_date: date | None
-    market_value_pln: Decimal
-    pnl_pln: Decimal
+    market_value_pln: Decimal | None
+    pnl_pln: Decimal | None
     pnl_pct: Decimal | None
-    change_1d_pln: Decimal
+    change_1d_pln: Decimal | None
     change_1d_pct: Decimal | None
     weight_pct: Decimal | None
 
 
 class PortfolioSummary(BaseModel):
-    value_pln: Decimal
-    value_prev_pln: Decimal
-    change_1d_pln: Decimal
+    value_pln: Decimal | None
+    value_prev_pln: Decimal | None
+    change_1d_pln: Decimal | None
     change_1d_pct: Decimal | None
     cost_pln: Decimal
-    pnl_pln: Decimal
+    pnl_pln: Decimal | None
     pnl_pct: Decimal | None
     xirr_pct: Decimal | None
     as_of: date | None

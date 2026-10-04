@@ -19,21 +19,21 @@ export type Position = {
   cost_pln: number;
   price: number | null;
   price_date: string | null;
-  market_value_pln: number;
-  pnl_pln: number;
+  market_value_pln: number | null;
+  pnl_pln: number | null;
   pnl_pct: number | null;
-  change_1d_pln: number;
+  change_1d_pln: number | null;
   change_1d_pct: number | null;
   weight_pct: number | null;
 };
 
 export type PortfolioSummary = {
-  value_pln: number;
-  value_prev_pln: number;
-  change_1d_pln: number;
+  value_pln: number | null;
+  value_prev_pln: number | null;
+  change_1d_pln: number | null;
   change_1d_pct: number | null;
   cost_pln: number;
-  pnl_pln: number;
+  pnl_pln: number | null;
   pnl_pct: number | null;
   xirr_pct: number | null;
   as_of: string | null;

@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import logging
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -15,6 +16,7 @@ from app.seed import seed_instruments
 from app.services.quotes import refresh_quotes
 
 scheduler = BackgroundScheduler(timezone=ZoneInfo("Europe/Warsaw"))
+logger = logging.getLogger(__name__)
 
 
 def _ensure_portfolio_schema(db):
@@ -48,9 +50,12 @@ def _ensure_portfolio_schema(db):
 def _scheduled_refresh():
     db = SessionLocal()
     try:
-        refresh_quotes(db)
+        result = refresh_quotes(db)
+        if result["errors"]:
+            logger.error("Scheduled quote refresh completed with errors: %s", result["errors"])
     except Exception:
         db.rollback()
+        logger.exception("Scheduled quote refresh failed")
     finally:
         db.close()
 

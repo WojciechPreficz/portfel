@@ -1,6 +1,7 @@
 import unittest
 from datetime import date, timedelta
 from decimal import Decimal
+from unittest.mock import patch
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
@@ -9,6 +10,7 @@ from app.database import Base
 from app.models import CashDeposit, Instrument, Portfolio, Price, Transaction
 from app.routers.portfolio import delete_holdings, delete_portfolio
 from app.services.portfolio import build_summary, xirr
+from app.services.quotes import refresh_quotes
 
 
 class MultiPortfolioTest(unittest.TestCase):
@@ -73,6 +75,28 @@ class MultiPortfolioTest(unittest.TestCase):
         self.assertEqual(first["positions"][0]["quantity"], Decimal("2"))
         self.assertEqual(second["positions"][0]["quantity"], Decimal("3"))
         self.assertEqual(aggregate["positions"][0]["quantity"], Decimal("5"))
+
+    def test_missing_price_is_reported_as_unknown_not_zero_or_total_loss(self):
+        self.db.query(Price).delete()
+        self.db.commit()
+
+        summary = build_summary(self.db, self.first.id)
+        position = summary["positions"][0]
+
+        self.assertIsNone(position["price"])
+        self.assertIsNone(position["market_value_pln"])
+        self.assertIsNone(position["pnl_pln"])
+        self.assertIsNone(position["weight_pct"])
+        self.assertIsNone(summary["value_pln"])
+        self.assertIsNone(summary["change_1d_pln"])
+        self.assertIsNone(summary["pnl_pln"])
+        self.assertIsNone(summary["xirr_pct"])
+
+    @patch("app.services.quotes._fetch_history", return_value=[])
+    def test_quote_refresh_reports_instruments_without_any_quote(self, _fetch_history):
+        result = refresh_quotes(self.db)
+
+        self.assertEqual(result["errors"], ["TEST: brak prawidłowych notowań w Stooq i Yahoo Finance"])
 
     def test_clearing_one_portfolio_preserves_shared_prices_and_other_holdings(self):
         result = delete_holdings(self.first.id, self.db)

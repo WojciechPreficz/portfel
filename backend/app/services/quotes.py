@@ -15,6 +15,8 @@ TROY_OUNCE_GRAMS = Decimal("31.1034768")
 
 
 def _upsert_price(db: Session, instrument_id: int, d: date, close: Decimal, currency: str) -> bool:
+    if close <= 0:
+        raise ValueError(f"Nieprawidłowa cena zamknięcia: {close}")
     existing = db.scalar(
         select(Price).where(Price.instrument_id == instrument_id, Price.date == d)
     )
@@ -101,7 +103,15 @@ def refresh_quotes(db: Session, years: int = 5) -> dict:
     for instrument in instruments:
         try:
             points = _fetch_history(instrument, hist_start, end)
-            for point in points:
+            valid_points = [point for point in points if point.close > 0]
+            if len(valid_points) != len(points):
+                errors.append(f"{instrument.ticker}: odrzucono niedodatnie ceny")
+            if not valid_points:
+                errors.append(
+                    f"{instrument.ticker}: brak prawidłowych notowań w Stooq i Yahoo Finance"
+                )
+                continue
+            for point in valid_points:
                 if _upsert_price(db, instrument.id, point.date, point.close, point.currency):
                     prices_upserted += 1
         except Exception as exc:  # noqa: BLE001

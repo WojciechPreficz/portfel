@@ -23,3 +23,5 @@ export const formatPrice = (value: number | null | undefined) =>
 export const formatPercent = (value: number | null | undefined) =>
   value == null ? '--' : `${percentFormat.format(value)}%`;
 export const isPositive = (value: number | null | undefined) => (value ?? 0) >= 0;
+export const trendClass = (value: number | null | undefined) =>
+  value == null ? '' : isPositive(value) ? 'positive' : 'negative';

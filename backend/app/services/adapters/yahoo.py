@@ -7,6 +7,9 @@ from app.services.adapters.base import QuotePoint
 
 
 YAHOO_SYMBOL_ALIASES = {
+    "ASSECOPOL.WA": "ACP.WA",
+    "ASSECCOPOL.WA": "ACP.WA",
+    "DEBICA.WA": "DBC.WA",
     "MEUD.FR": "MEUD.MI",
 }
 
