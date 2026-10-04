@@ -1,4 +1,6 @@
 import unittest
+from datetime import date
+from decimal import Decimal
 from io import BytesIO
 
 from sqlalchemy import create_engine, select
@@ -7,10 +9,54 @@ from starlette.datastructures import UploadFile
 
 from app.database import Base
 from app.models import Instrument, Portfolio, Transaction
-from app.routers.transactions import _infer_import_instrument_type, import_transactions
+from app.routers.transactions import _infer_import_instrument_type, create_transaction, import_transactions
+from app.schemas import TransactionCreate
+from app.services.portfolio import position_metrics
 
 
 class TransactionRouterTest(unittest.TestCase):
+    def test_gold_buy_stores_entered_pln_total_and_uses_it_as_basis(self):
+        engine = create_engine("sqlite:///:memory:")
+        Base.metadata.create_all(engine)
+        db = Session(engine)
+        try:
+            portfolio = Portfolio(name="IKE")
+            instrument = Instrument(
+                ticker="XAU-9999",
+                name="Złoto 999.9 (24K)",
+                type="gold",
+                currency="USD",
+                provider="yahoo",
+                symbol="GC=F",
+                unit="gram",
+            )
+            db.add_all([portfolio, instrument])
+            db.flush()
+
+            transaction = create_transaction(
+                TransactionCreate(
+                    portfolio_id=portfolio.id,
+                    instrument_id=instrument.id,
+                    quantity=Decimal("50"),
+                    price=Decimal("0"),
+                    purchase_price_pln=Decimal("13250"),
+                    currency="PLN",
+                    date=date(2026, 9, 15),
+                ),
+                db,
+            )
+
+            self.assertEqual(transaction.purchase_price_pln, Decimal("13250"))
+            self.assertEqual(transaction.price, Decimal("0"))
+            _quantity, avg_cost, cost_pln = position_metrics(
+                [db.get(Transaction, transaction.id)], db, date(2026, 9, 15)
+            )
+            self.assertEqual(avg_cost, Decimal("265"))
+            self.assertEqual(cost_pln, Decimal("13250"))
+        finally:
+            db.close()
+            engine.dispose()
+
     def test_neu_import_is_classified_as_polish_stock(self):
         self.assertEqual(_infer_import_instrument_type("NEU", "NEU", None), "stock_pl")
 

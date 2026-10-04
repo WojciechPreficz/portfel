@@ -58,6 +58,7 @@ class Transaction(Base):
     type: Mapped[str] = mapped_column(String(8))
     quantity: Mapped[Decimal] = mapped_column(Numeric(18, 8))
     price: Mapped[Decimal] = mapped_column(Numeric(18, 8))
+    purchase_price_pln: Mapped[Decimal | None] = mapped_column(Numeric(18, 8), nullable=True)
     currency: Mapped[str] = mapped_column(String(3))
     date: Mapped[date_type] = mapped_column(Date, index=True)
     commission: Mapped[Decimal] = mapped_column(Numeric(18, 8), default=Decimal("0"))

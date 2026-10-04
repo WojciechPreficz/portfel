@@ -41,7 +41,11 @@ class YahooAdapter:
         chart = result[0]
         meta = chart.get("meta", {})
         timestamps = chart.get("timestamp", [])
-        closes = chart.get("indicators", {}).get("adjclose", [{}])[0].get("adjclose", [])
+        indicators = chart.get("indicators", {})
+        adjusted_closes = indicators.get("adjclose", [])
+        closes = adjusted_closes[0].get("adjclose", []) if adjusted_closes else []
+        if not closes or all(close is None for close in closes):
+            closes = indicators.get("quote", [{}])[0].get("close", [])
         points: list[QuotePoint] = []
         for timestamp, close in zip(timestamps, closes):
             if close is None:

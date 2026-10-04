@@ -685,6 +685,11 @@ footer {
   outline: 0;
   font-size: 13px;
 }
+.modal input[type='checkbox'] {
+  width: auto;
+  margin: 0;
+  accent-color: #89a94e;
+}
 .modal input:focus,
 .modal select:focus {
   border-color: #89a94e;
@@ -706,6 +711,45 @@ footer {
   font-size: 12px;
   line-height: 1.5;
   margin: 2px 0 0;
+}
+.gold-checkbox-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  color: #596158;
+  font-size: 12px;
+  font-weight: 500;
+}
+.gold-price-input {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid #d5ddd1;
+  border-radius: 3px;
+  background: white;
+}
+.gold-price-input:focus-within {
+  border-color: #89a94e;
+  box-shadow: 0 0 0 3px rgba(194, 236, 98, 0.2);
+}
+.gold-price-input input {
+  border: 0;
+  box-shadow: none !important;
+}
+.gold-price-input > span {
+  padding: 0 12px;
+  color: #596158;
+  font-size: 12px;
+}
+.gold-quote {
+  margin: -5px 0 0;
+  color: #596158;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.gold-quote-error {
+  color: #8b4239;
 }
 @media (max-width: 900px) {
   .sidebar {

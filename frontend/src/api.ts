@@ -47,9 +47,19 @@ export type TransactionPayload = {
   instrument_id: number;
   quantity: number;
   price: number;
+  purchase_price_pln?: number;
+  currency?: string;
   date: string;
   commission: number;
   type: 'BUY' | 'SELL';
+};
+
+export type GoldQuote = {
+  spot_usd_oz: number;
+  spot_date: string;
+  usd_pln: number;
+  fx_date: string;
+  price_pln_g: number;
 };
 
 const api = async <T>(path: string, options?: RequestInit): Promise<T> => {
@@ -98,16 +108,24 @@ export const createTransaction = (payload: TransactionPayload) =>
     body: JSON.stringify(payload),
   });
 
-export const importTransactions = (file: File, source: 'xstation5' | 'bossa', portfolioId: number) => {
+export const importTransactions = (
+  file: File,
+  source: 'xstation5' | 'bossa',
+  portfolioId: number,
+) => {
   const body = new FormData();
   body.append('file', file);
   body.append('source', source);
   body.append('portfolio_id', String(portfolioId));
-  return api<{ imported: number; deposits: number; skipped: number; errors: string[] }>('/api/transactions/import', {
-    method: 'POST',
-    body,
-  });
+  return api<{ imported: number; deposits: number; skipped: number; errors: string[] }>(
+    '/api/transactions/import',
+    {
+      method: 'POST',
+      body,
+    },
+  );
 };
 
 export const refreshQuotes = () =>
   api<{ errors: string[] }>('/api/quotes/refresh', { method: 'POST' });
+export const getGoldQuote = () => api<GoldQuote>('/api/quotes/gold');

@@ -108,7 +108,10 @@ def position_metrics(txs: list[Transaction], db: Session, on_date: date, fx_cach
         fx = fx_on(db, tx.currency, tx.date, fx_cache)
         if tx.type == "BUY":
             buy_qty += _as_decimal(tx.quantity)
-            buy_cost_pln += (_as_decimal(tx.quantity) * _as_decimal(tx.price) + _as_decimal(tx.commission)) * fx
+            if tx.purchase_price_pln is not None:
+                buy_cost_pln += _as_decimal(tx.purchase_price_pln) + _as_decimal(tx.commission) * fx
+            else:
+                buy_cost_pln += (_as_decimal(tx.quantity) * _as_decimal(tx.price) + _as_decimal(tx.commission)) * fx
     avg_cost = (buy_cost_pln / buy_qty) if buy_qty else ZERO
     cost_pln = avg_cost * qty if qty else ZERO
     return qty, avg_cost, cost_pln
@@ -213,7 +216,11 @@ def build_summary(db: Session, portfolio_id: int | None = None) -> dict:
         if tx.portfolio_id in deposit_portfolio_ids:
             continue
         fx = fx_on(db, tx.currency, tx.date, fx_cache)
-        gross = _as_decimal(tx.quantity) * _as_decimal(tx.price) * fx
+        gross = (
+            _as_decimal(tx.purchase_price_pln)
+            if tx.purchase_price_pln is not None
+            else _as_decimal(tx.quantity) * _as_decimal(tx.price) * fx
+        )
         commission = _as_decimal(tx.commission) * fx
         cash_flows.append((tx.date, -(gross + commission) if tx.type == "BUY" else gross - commission))
     if total_value:

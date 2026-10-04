@@ -75,3 +75,14 @@ def fetch_fx_history(code: str, start: date, end: date) -> list[tuple[date, Deci
                     )
                 )
     return rows
+
+
+def fetch_latest_fx(code: str) -> tuple[date, Decimal]:
+    with httpx.Client(timeout=10.0, headers=HEADERS) as client:
+        response = client.get(
+            f"{NBP_FX}/{code.lower()}/last/1/",
+            params={"format": "json"},
+        )
+        response.raise_for_status()
+        rate = response.json()["rates"][0]
+        return date.fromisoformat(rate["effectiveDate"]), Decimal(str(rate["mid"]))

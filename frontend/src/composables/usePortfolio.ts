@@ -10,6 +10,10 @@ export type TransactionForm = {
   price: string;
   date: string;
   commission: string;
+  goldWeightGrams: string;
+  goldOunces: string;
+  goldPurity: string;
+  goldManualWeight: boolean;
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -20,7 +24,13 @@ const emptyTransactionForm = (): TransactionForm => ({
   price: '',
   date: today(),
   commission: '0',
+  goldWeightGrams: '',
+  goldOunces: '1',
+  goldPurity: '9999',
+  goldManualWeight: false,
 });
+
+const TROY_OUNCE_GRAMS = 31.1034768;
 
 export const usePortfolio = (portfolioId: ComputedRef<number | null>) => {
   const summary = ref<PortfolioSummary | null>(null);
@@ -57,27 +67,61 @@ export const usePortfolio = (portfolioId: ComputedRef<number | null>) => {
     }
   };
 
-  const submitTransaction = async () => {
+  const submitTransaction = async (onSaved?: () => void) => {
+    const isGold = form.value.marketType === 'gold';
+    const goldInstrument = isGold
+      ? filteredInstruments.value.find(
+          (instrument) => instrument.ticker === `XAU-${form.value.goldPurity}`,
+        )
+      : undefined;
+    const quantity = isGold
+      ? form.value.goldManualWeight
+        ? Number(form.value.goldWeightGrams)
+        : Number(form.value.goldOunces) * TROY_OUNCE_GRAMS
+      : Number(form.value.quantity);
+    const purchasePrice = Number(form.value.price);
     if (
       !form.value.marketType ||
       portfolioId.value === null ||
-      !form.value.instrumentId ||
-      !form.value.quantity ||
-      !form.value.price ||
+      (!isGold && !form.value.instrumentId) ||
+      !quantity ||
+      quantity <= 0 ||
+      !purchasePrice ||
+      purchasePrice <= 0 ||
       !form.value.date
     )
       return false;
+    if (isGold && !goldInstrument) {
+      error.value = 'Nie znaleziono instrumentu złota dla wybranej próby.';
+      return false;
+    }
+    const instrumentId = goldInstrument ? goldInstrument.id : Number(form.value.instrumentId);
     try {
       await portfolioService.buy(portfolioId.value, {
-        instrument_id: Number(form.value.instrumentId),
-        quantity: Number(form.value.quantity),
-        price: Number(form.value.price),
+        instrument_id: instrumentId,
+        quantity,
+        price: isGold ? 0 : purchasePrice,
+        ...(isGold ? { purchase_price_pln: purchasePrice } : {}),
+        ...(isGold ? { currency: 'PLN' } : {}),
         date: form.value.date,
-        commission: Number(form.value.commission || 0),
+        commission: isGold ? 0 : Number(form.value.commission || 0),
       });
-      notice.value = 'Zakup zapisany. Odśwież ceny, aby zobaczyć bieżącą wycenę.';
       form.value = emptyTransactionForm();
+      onSaved?.();
+      let savedNotice = 'Zakup zapisany.';
+      if (isGold) {
+        try {
+          const result = await portfolioService.refreshQuotes();
+          savedNotice = result.errors.length
+            ? `Zakup zapisany. Nie udało się odświeżyć części notowań: ${result.errors.join('; ')}`
+            : 'Zakup zapisany, a bieżąca wycena została pobrana.';
+        } catch (reason) {
+          const detail = reason instanceof Error ? reason.message : 'nieznany błąd';
+          savedNotice = `Zakup zapisany, ale nie udało się odświeżyć wyceny: ${detail}`;
+        }
+      }
       await loadData();
+      notice.value = savedNotice;
       return true;
     } catch (reason) {
       error.value = reason instanceof Error ? reason.message : 'Nie udało się zapisać transakcji.';

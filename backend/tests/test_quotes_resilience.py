@@ -3,12 +3,35 @@ from datetime import date
 from decimal import Decimal
 from unittest.mock import Mock, patch
 
+from app.routers.quotes import gold_quote
+from app.services.adapters.base import QuotePoint
 from app.services.adapters.yahoo import YahooAdapter
 from app.services.portfolio import xirr
 from app.services.quotes import _fetch_history
 
 
 class YahooAdapterTest(unittest.TestCase):
+    @patch("app.routers.quotes.fetch_latest_fx")
+    @patch("app.routers.quotes.YahooAdapter.fetch_last")
+    def test_live_gold_quote_combines_yahoo_spot_with_nbp_rate(self, fetch_last, fetch_fx):
+        fetch_last.return_value = QuotePoint(
+            date=date(2026, 9, 23),
+            close=Decimal("2650"),
+            currency="USD",
+        )
+        fetch_fx.return_value = (date(2026, 9, 23), Decimal("3.7"))
+
+        quote = gold_quote()
+
+        self.assertEqual(quote.spot_usd_oz, Decimal("2650"))
+        self.assertEqual(quote.usd_pln, Decimal("3.7"))
+        self.assertEqual(
+            quote.price_pln_g,
+            Decimal("2650") * Decimal("3.7") / Decimal("31.1034768"),
+        )
+        fetch_last.assert_called_once_with("GC=F", "USD")
+        fetch_fx.assert_called_once_with("USD")
+
     @patch("app.services.adapters.yahoo.httpx.get")
     def test_missing_symbol_returns_no_points(self, get):
         response = Mock(status_code=404)
@@ -64,6 +87,51 @@ class YahooAdapterTest(unittest.TestCase):
         )
 
         self.assertEqual(points[-1].close, Decimal("362.04"))
+
+    @patch("app.services.adapters.yahoo.httpx.get")
+    def test_history_uses_close_when_yahoo_has_no_adjusted_closes(self, get):
+        get.return_value = Mock(
+            status_code=200,
+            json=lambda: {
+                "chart": {
+                    "result": [
+                        {
+                            "timestamp": [1790083800],
+                            "indicators": {
+                                "adjclose": [{"adjclose": [None]}],
+                                "quote": [{"close": [2650.0]}],
+                            },
+                        }
+                    ]
+                }
+            },
+        )
+
+        points = YahooAdapter().fetch_history(
+            "GC=F", date(2026, 9, 22), date(2026, 9, 23), "USD"
+        )
+
+        self.assertEqual(points[0].close, Decimal("2650.0"))
+
+    @patch("app.services.quotes.get_adapter")
+    def test_gold_yahoo_ounce_price_is_converted_to_pure_gold_per_gram(self, get_adapter):
+        instrument = Mock(
+            type="gold",
+            ticker="XAU-9999",
+            provider="yahoo",
+            symbol="GC=F",
+            currency="USD",
+        )
+        get_adapter.return_value.fetch_history.return_value = [
+            Mock(date=date(2026, 9, 23), close=Decimal("2000"), currency="USD")
+        ]
+
+        points = _fetch_history(instrument, date(2026, 9, 22), date(2026, 9, 23))
+
+        self.assertEqual(
+            points[0].close,
+            Decimal("2000") * Decimal("0.9999") / Decimal("31.1034768"),
+        )
 
     @patch("app.services.quotes.YahooAdapter.fetch_history")
     @patch("app.services.quotes.get_adapter")

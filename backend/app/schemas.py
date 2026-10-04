@@ -47,6 +47,7 @@ class TransactionCreate(BaseModel):
     type: str = "BUY"
     quantity: Decimal = Field(gt=0)
     price: Decimal = Field(ge=0)
+    purchase_price_pln: Decimal | None = Field(default=None, gt=0)
     currency: str | None = None
     date: date
     commission: Decimal = Field(default=Decimal("0"), ge=0)
@@ -58,6 +59,7 @@ class TransactionOut(BaseModel):
     type: str
     quantity: Decimal
     price: Decimal
+    purchase_price_pln: Decimal | None
     currency: str
     date: date
     commission: Decimal
@@ -116,6 +118,14 @@ class FxLatest(BaseModel):
     pair: str
     date: date
     rate: Decimal
+
+
+class GoldQuote(BaseModel):
+    spot_usd_oz: Decimal
+    spot_date: date
+    usd_pln: Decimal
+    fx_date: date
+    price_pln_g: Decimal
 
 
 class RefreshResult(BaseModel):

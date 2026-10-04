@@ -1,10 +1,10 @@
 import json
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.models import Instrument
+from app.models import Instrument, Price
 
 GPW_STOCK_TICKERS = """
 06MAGNA 08OCTAVA 11BIT 3RGAMES 4MASS ABPL ACAUTOGAZ ACTION ADIUVO AGORA AGROTON AIGAMES AILLERON AIRWAY ALIOR ALLEGRO ALTA ALTUS AMBRA AMICA AMPLI AMREST ANSWEAR APATOR APLISENS APSENERGY ARCHICOM ARCTIC ARLEN ARTIFEX ASBIS ASMGROUP ASSECOBS ASSECOPOL ASSECOSEE ASTARTA ATAL ATENDE ATLANTAPL ATLANTIS ATMGRUPA ATREM AUTOPARTN BBIDEV BENEFIT BEST BETACOM BIGCHEESE BIOCELTIX BIOPLANET BIOTON BLOOBER BNPPPL BOGDANKA BOOMBIT BORYSZEW BOS BOWIM BUDIMEX BUMECH BUMECHDEF CAPITEA CAPTORTX CASPAR CAVATINA CCENERGY CDPROJEKT CDRL CELTIC CEZ CFI CIGAMES CITYSERV CLNPHARMA CLOUD COALENERG COGNOR COLUMBUS COMP COMPERIA COMPREMUM CORMAY CPIEUROPE CREEPYJAR CREOTECH CRQUANTUM CYBERFLKS CYFRPLSAT CZTOREBKA DADELO DATAWALK DBENERGY DEBICA DECORA DEKPOL DELKO DEVELIA DGA DIAG DIGITANET DIGITREE DINOPL DMGROUP DOMDEV DRAGOENT ECBSA ECHO EDINVEST EFEKT ELEKTROTI ELKOP EMPLOCITY ENEA ENELMED ENERGA ENERGOINS ENTER EQUNICO ERBUD ERSTEPL ESOTIQ ESTAR EUROCASH EUROHOLD EUROTEL FABRITY FASING FASTFIN FEERUM FERRO FMG FON FOODHUB FORTE GAMEOPS GAMFACTOR GENOMTEC GETIN GOBARTO GREENX GRODNO GRUPAAZOTY GRUPRACUJ GTC HANDLOWY HARPER HELIO HERKULES HUUUGE HYDROTOR IBSM IDMSA IFIRMA IFSA IMCOMPANY IMMOBILE IMPERIO IMS INC INGBSK INPOST INPRO INSTALKRK INTERBUD INTERCARS INTERSPPL INTROL IPOPEMA IZOBLOK IZOLACJA IZOSTAL JRH JSW JWWINVEST KCI KERNEL KETY KGHM KGL KINOPOL KOGENERA KOMPAP KOMPUTRON KPPD KRAKCHEM KRKA KRUK KRVITAMIN KSGAGRO LARQ LENA LENTEX LESS LIBET LMCU LOKUM LPP LSISOFT LUBAWA MABION MAKARONPL MANGATA MANYDEV MARVIPOL MAXCOM MBANK MBWS MCI MCR MDIENERGIA MEDICALG MEDINICE MEGARON MENNICA MERCATOR MEXPOLSKA MFO MILKILAND MILLENNIUM MIRACULUM MIRBUD MLPGROUP MLSYSTEM MOBRUK MODIVO MOL MOLECURE MONNARI MOSTALPLC MOSTALWAR MOSTALZAB MOVIEGAMES MULTIQURE MURAPOL MWTRADE NANOGROUP NEUCA NEWAG NEXITY NOTORIA NOTOWANIA NOVATURAS NOVAVISGR NOVITA NTCAPITAL NTTSYSTEM ODLEWNIE ONDE ONESANO OPONEO.PL OPTEAM ORANGEPL OTLOG OTMUCHOW PANOVA PASSUS PATENTUS PBG PBSFINANSE PCCEXOL PCCROKITA PCFGROUP PEKABEX PEKAO PEP PEPCO PEPEES PGE PGFGROUP PHARMENA PHN PHOTON PJPMAKRUM PKNORLEN PKOBP PKPCARGO PLAYWAY PLAZACNTR PMPG POLICE POLIMEXMS POLTREG POLWAX PRAGMAINK PRIMAMODA PROCHEM PROMISE PROTEKTOR PTWP PULAWY PZU QUANTUM QUERCUS RAFAMET RAINBOW RANKPROGR RAWLPLUG REGNON REINHOLD REINO RELPOL REMAK RENDER REX ROBYG ROPCZYCE RYVU SANOK SANTANDER SANWIL SCPFL SECOGROUP SEKO SELENAFM SELVITA SFINKS SILVAIR-REGS SILVANO SIMFABRIC SKARBIEC SKYLINE SNIEZKA SNTVERSE SOHODEV SONEL SOPHARMA SPYROSOFT STALEXP STALPROD STALPROFI STAPORKOW STARHEDGE SUNEX SYGNITY SYN2BIO SYNEKTIK TALEX TARCZYNSKI TATRY TAURONPE TBULL TENDERHUT TERMOREX TESGAS TEXT TORPOL TOWERINVT TOYA TRAKCJA TRANSPOL TRITON TSGAMES ULMA ULTGAMES UNFOLD UNIBEP UNICREDIT UNIMOT URTESTE VERCOM VIGOPHOTN VINDEXUS VIRTUS VIVID VOTUM VOXEL VRG WARIMPEX WASKO WAWEL WIELTON WIKANA WIRTUALNA WITTCHEN XPLUS XTB XTPL YANOSIK YARRL ZABKA ZAMET ZEPAK ZREMB ZUE
@@ -27,6 +27,13 @@ YAHOO_SYMBOL_OVERRIDES = {
 }
 
 US_TICKER_EXCLUSIONS = {"ACP"}
+GOLD_PURITIES = {
+    "9999": ("999.9", "24K"),
+    "9167": ("916.7", "22K"),
+    "7500": ("750", "18K"),
+    "5850": ("585", "14K"),
+    "3750": ("375", "9K"),
+}
 
 POLISH_MARKET_INSTRUMENTS = {
     "stock_pl": [
@@ -123,16 +130,19 @@ SEED = [
     ],
     *NASDAQ_STOCKS,
     *NYSE_STOCKS,
-    {
-        "ticker": "XAU",
-        "isin": None,
-        "name": "Złoto (NBP, PLN/g)",
-        "type": "gold",
-        "currency": "PLN",
-        "provider": "nbp",
-        "symbol": "XAU",
-        "unit": "gram",
-    },
+    *[
+        {
+            "ticker": f"XAU-{code}",
+            "isin": None,
+            "name": f"Złoto {fineness} ({karat})",
+            "type": "gold",
+            "currency": "USD",
+            "provider": "yahoo",
+            "symbol": "GC=F",
+            "unit": "gram",
+        }
+        for code, (fineness, karat) in GOLD_PURITIES.items()
+    ],
 ]
 
 
@@ -160,9 +170,9 @@ def apply_instrument_defaults(payload: dict) -> dict:
         data.setdefault("unit", "share")
         data.setdefault("name", data.get("name") or ticker)
     elif itype == "gold":
-        data.setdefault("currency", "PLN")
-        data.setdefault("provider", "nbp")
-        data.setdefault("symbol", "XAU")
+        data.setdefault("currency", "USD")
+        data.setdefault("provider", "yahoo")
+        data.setdefault("symbol", "GC=F")
         data.setdefault("unit", "gram")
         data.setdefault("name", data.get("name") or "Złoto")
     else:
@@ -195,6 +205,18 @@ def seed_instruments(db: Session) -> None:
         existing_rows[("ACP", "stock_pl")] = legacy_acp
         del existing_rows[("ACP", "stock_us_nyse")]
 
+    legacy_gold = existing_rows.get(("XAU", "gold"))
+    if legacy_gold:
+        db.execute(delete(Price).where(Price.instrument_id == legacy_gold.id))
+        legacy_gold.ticker = "XAU-9999"
+        legacy_gold.name = "Złoto 999.9 (24K)"
+        legacy_gold.currency = "USD"
+        legacy_gold.provider = "yahoo"
+        legacy_gold.symbol = "GC=F"
+        legacy_gold.unit = "gram"
+        existing_rows[("XAU-9999", "gold")] = legacy_gold
+        del existing_rows[("XAU", "gold")]
+
     for item in SEED:
         key = (item.get("isin") or item["ticker"], item["type"])
         if item["ticker"] == "KTY" and ("GKP", "stock_pl") in existing_rows:
@@ -204,6 +226,12 @@ def seed_instruments(db: Session) -> None:
             existing_rows[("KTY", "stock_pl")] = existing_rows[("GKP", "stock_pl")]
         if key in existing_rows:
             row = existing_rows[key]
+            if item["type"] == "gold":
+                row.name = item["name"]
+                row.currency = item["currency"]
+                row.provider = item["provider"]
+                row.symbol = item["symbol"]
+                row.unit = item["unit"]
             override_symbol = STOOQ_SYMBOL_OVERRIDES.get(row.ticker)
             if override_symbol:
                 row.symbol = override_symbol

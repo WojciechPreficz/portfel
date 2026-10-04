@@ -6,8 +6,12 @@ from sqlalchemy.orm import Session
 
 from app.models import FxRate, Instrument, Price, Transaction
 from app.services.adapters import get_adapter
+from app.services.adapters.base import QuotePoint
 from app.services.adapters.nbp import fetch_fx_history
 from app.services.adapters.yahoo import YahooAdapter
+from app.seed import GOLD_PURITIES
+
+TROY_OUNCE_GRAMS = Decimal("31.1034768")
 
 
 def _upsert_price(db: Session, instrument_id: int, d: date, close: Decimal, currency: str) -> bool:
@@ -48,6 +52,19 @@ def _fetch_history(instrument, start: date, end: date):
         if not fallback_symbol.endswith(".WA"):
             fallback_symbol = f"{fallback_symbol}.WA"
         return YahooAdapter().fetch_history(fallback_symbol, start, end, instrument.currency)
+    if instrument.type == "gold":
+        purity_code = instrument.ticker.rsplit("-", 1)[-1]
+        if purity_code not in GOLD_PURITIES:
+            raise ValueError(f"Nieobsługiwana próba złota: {instrument.ticker}")
+        purity = Decimal(purity_code) / Decimal("10000")
+        return [
+            QuotePoint(
+                date=point.date,
+                close=point.close * purity / TROY_OUNCE_GRAMS,
+                currency=point.currency,
+            )
+            for point in points
+        ]
     return points
 
 

@@ -22,6 +22,8 @@ def _ensure_portfolio_schema(db):
     columns = {column["name"] for column in inspector.get_columns("transactions")}
     if "portfolio_id" not in columns:
         db.execute(text("ALTER TABLE transactions ADD COLUMN portfolio_id INTEGER REFERENCES portfolios(id)"))
+    if "purchase_price_pln" not in columns:
+        db.execute(text("ALTER TABLE transactions ADD COLUMN purchase_price_pln NUMERIC(18, 8)"))
     deposit_columns = {column["name"] for column in inspector.get_columns("cash_deposits")}
     if "portfolio_id" not in deposit_columns:
         db.execute(text("ALTER TABLE cash_deposits ADD COLUMN portfolio_id INTEGER REFERENCES portfolios(id)"))

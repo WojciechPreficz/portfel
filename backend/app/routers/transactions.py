@@ -60,6 +60,13 @@ def create_transaction(payload: TransactionCreate, db: Session = Depends(get_db)
     if payload.type not in {"BUY", "SELL"}:
         raise HTTPException(400, "Typ musi być BUY lub SELL")
     instrument = _get_or_create_instrument(db, payload)
+    if instrument.type == "gold" and payload.type == "BUY":
+        if payload.purchase_price_pln is None:
+            raise HTTPException(400, "Podaj całkowitą cenę zakupu złota w PLN")
+        if payload.currency not in {None, "PLN"}:
+            raise HTTPException(400, "Cena zakupu złota musi być podana w PLN")
+    elif payload.purchase_price_pln is not None:
+        raise HTTPException(400, "Cena zakupu w PLN jest dostępna tylko dla złota")
     portfolio_id = payload.portfolio_id
     if portfolio_id is None:
         portfolio_id = db.scalar(select(Portfolio.id).order_by(Portfolio.id).limit(1))
@@ -81,7 +88,8 @@ def create_transaction(payload: TransactionCreate, db: Session = Depends(get_db)
         type=payload.type,
         quantity=payload.quantity,
         price=payload.price,
-        currency=payload.currency or instrument.currency,
+        purchase_price_pln=payload.purchase_price_pln,
+        currency="PLN" if instrument.type == "gold" and payload.type == "BUY" else payload.currency or instrument.currency,
         date=payload.date,
         commission=payload.commission,
     )

@@ -105,7 +105,9 @@
   };
 
   const submitPurchase = async () => {
-    if (await submitTransaction()) showTransactionForm.value = false;
+    await submitTransaction(() => {
+      showTransactionForm.value = false;
+    });
   };
 
   const confirmRemoveAll = async () => {

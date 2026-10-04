@@ -1,6 +1,6 @@
 import unittest
 
-from app.seed import GPW_STOCK_TICKERS, NASDAQ_STOCKS, NYSE_STOCKS, POLISH_MARKET_INSTRUMENTS, STOOQ_SYMBOL_OVERRIDES, apply_instrument_defaults
+from app.seed import GOLD_PURITIES, GPW_STOCK_TICKERS, NASDAQ_STOCKS, NYSE_STOCKS, POLISH_MARKET_INSTRUMENTS, SEED, STOOQ_SYMBOL_OVERRIDES, apply_instrument_defaults
 
 
 class SeedCatalogTest(unittest.TestCase):
@@ -24,6 +24,14 @@ class SeedCatalogTest(unittest.TestCase):
         self.assertIn("V80A", etf_tickers)
         v80a = next(row for row in POLISH_MARKET_INSTRUMENTS["etf"] if row["ticker"] == "V80A")
         self.assertEqual(v80a["symbol"], "V80A.AS")
+
+    def test_gold_catalog_uses_yahoo_and_has_purity_variants(self):
+        gold = [row for row in SEED if row["type"] == "gold"]
+
+        self.assertEqual(len(gold), len(GOLD_PURITIES))
+        self.assertTrue(all(row["provider"] == "yahoo" for row in gold))
+        self.assertTrue(all(row["currency"] == "USD" for row in gold))
+        self.assertTrue(all(row["symbol"] == "GC=F" for row in gold))
 
     def test_meu_uses_yahoo_exchange_symbol(self):
         instrument = apply_instrument_defaults({"ticker": "MEU", "type": "etf"})
