@@ -482,6 +482,62 @@ button {
   overflow-x: auto;
   margin-top: 22px;
 }
+.holdings-groups {
+  display: grid;
+  gap: 10px;
+}
+.holdings-group {
+  min-width: 0;
+  border-top: 1px solid #e8ece5;
+}
+.holdings-group-heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 14px 0;
+  cursor: pointer;
+  list-style: none;
+}
+.holdings-group-heading::-webkit-details-marker {
+  display: none;
+}
+.holdings-group-heading::before {
+  content: '▶';
+  color: #799168;
+  font-size: 9px;
+  transition: transform 0.15s ease;
+}
+.holdings-group[open] > .holdings-group-heading::before {
+  transform: rotate(90deg);
+}
+.holdings-group-heading:focus-visible {
+  outline: 2px solid #799168;
+  outline-offset: 3px;
+}
+.holdings-group-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+.holdings-group-total {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.holdings-group-total > span {
+  font-weight: 500;
+}
+.holdings-group-total small {
+  color: #858d84;
+  font-size: 11px;
+  font-weight: 400;
+}
+.holdings-group-table {
+  overflow-x: auto;
+}
 table {
   width: 100%;
   border-collapse: collapse;
