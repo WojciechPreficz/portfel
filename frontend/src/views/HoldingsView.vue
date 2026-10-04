@@ -32,6 +32,7 @@
     { key: 'polish', label: 'Akcje polskie' },
     { key: 'us', label: 'Akcje USA' },
     { key: 'etf', label: 'ETF' },
+    { key: 'gold', label: 'Złoto' },
     { key: 'other', label: 'Pozostałe aktywa' },
   ] as const;
 
@@ -73,6 +74,7 @@
       ['polish', []],
       ['us', []],
       ['etf', []],
+      ['gold', []],
       ['other', []],
     ]);
 
@@ -85,7 +87,9 @@
             ? 'us'
             : type === 'etf'
               ? 'etf'
-              : 'other';
+              : type === 'gold'
+                ? 'gold'
+                : 'other';
       groups.get(key)?.push(position);
     }
 
