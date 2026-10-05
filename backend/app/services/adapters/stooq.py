@@ -1,5 +1,5 @@
 import csv
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from io import StringIO
 
@@ -11,10 +11,23 @@ STOOQ_URL = "https://stooq.pl/q/d/l/"
 
 
 class StooqAdapter:
+    def fetch_many(
+        self, requests: dict[str, tuple[date, date, str]]
+    ) -> dict[str, list[QuotePoint]]:
+        return {
+            symbol: self.fetch_history(symbol, start, end, currency)
+            for symbol, (start, end, currency) in requests.items()
+        }
+
     def fetch_history(
         self, symbol: str, start: date, end: date, currency: str
     ) -> list[QuotePoint]:
-        params = {"s": symbol.lower(), "i": "d"}
+        params = {
+            "s": symbol.lower(),
+            "i": "d",
+            "d1": start.strftime("%Y%m%d"),
+            "d2": end.strftime("%Y%m%d"),
+        }
         with httpx.Client(timeout=10.0, follow_redirects=True) as client:
             response = client.get(STOOQ_URL, params=params)
             response.raise_for_status()
@@ -41,5 +54,6 @@ class StooqAdapter:
         return points
 
     def fetch_last(self, symbol: str, currency: str) -> QuotePoint | None:
-        history = self.fetch_history(symbol, date(1990, 1, 1), date.today(), currency)
+        end = date.today()
+        history = self.fetch_history(symbol, end - timedelta(days=14), end, currency)
         return history[-1] if history else None

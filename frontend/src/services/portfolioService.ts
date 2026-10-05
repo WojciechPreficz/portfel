@@ -24,8 +24,8 @@ export const portfolioService = {
     return createTransaction({ ...payload, portfolio_id: portfolioId, type: 'SELL' });
   },
 
-  refreshQuotes() {
-    return refreshQuotes();
+  refreshQuotes(instrumentIds?: number[]) {
+    return refreshQuotes(instrumentIds);
   },
 
   clearPortfolio(portfolioId: number) {

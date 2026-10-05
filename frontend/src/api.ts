@@ -15,8 +15,8 @@ export type Portfolio = { id: number; name: string };
 export type Position = {
   instrument: Instrument;
   quantity: number;
-  avg_cost: number;
-  cost_pln: number;
+  avg_cost: number | null;
+  cost_pln: number | null;
   price: number | null;
   price_date: string | null;
   market_value_pln: number | null;
@@ -32,7 +32,7 @@ export type PortfolioSummary = {
   value_prev_pln: number | null;
   change_1d_pln: number | null;
   change_1d_pct: number | null;
-  cost_pln: number;
+  cost_pln: number | null;
   pnl_pln: number | null;
   pnl_pct: number | null;
   xirr_pct: number | null;
@@ -117,7 +117,13 @@ export const importTransactions = (
   body.append('file', file);
   body.append('source', source);
   body.append('portfolio_id', String(portfolioId));
-  return api<{ imported: number; deposits: number; skipped: number; errors: string[] }>(
+  return api<{
+    imported: number;
+    deposits: number;
+    skipped: number;
+    errors: string[];
+    instrument_ids: number[];
+  }>(
     '/api/transactions/import',
     {
       method: 'POST',
@@ -126,6 +132,10 @@ export const importTransactions = (
   );
 };
 
-export const refreshQuotes = () =>
-  api<{ errors: string[] }>('/api/quotes/refresh', { method: 'POST' });
+export const refreshQuotes = (instrumentIds?: number[]) => {
+  const query = new URLSearchParams();
+  instrumentIds?.forEach((id) => query.append('instrument_ids', String(id)));
+  const suffix = query.size ? `?${query.toString()}` : '';
+  return api<{ errors: string[] }>(`/api/quotes/refresh${suffix}`, { method: 'POST' });
+};
 export const getGoldQuote = () => api<GoldQuote>('/api/quotes/gold');

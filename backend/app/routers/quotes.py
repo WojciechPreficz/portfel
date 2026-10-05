@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -14,8 +14,11 @@ router = APIRouter(prefix="/api/quotes", tags=["quotes"])
 
 
 @router.post("/refresh", response_model=RefreshResult)
-def refresh(db: Session = Depends(get_db)):
-    return refresh_quotes(db)
+def refresh(
+    instrument_ids: list[int] | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    return refresh_quotes(db, instrument_ids=instrument_ids)
 
 
 @router.get("/gold", response_model=GoldQuote)

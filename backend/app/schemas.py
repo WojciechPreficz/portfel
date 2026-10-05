@@ -73,13 +73,14 @@ class TransactionImportResult(BaseModel):
     deposits: int = 0
     skipped: int
     errors: list[str]
+    instrument_ids: list[int] = Field(default_factory=list)
 
 
 class PositionOut(BaseModel):
     instrument: InstrumentOut
     quantity: Decimal
-    avg_cost: Decimal
-    cost_pln: Decimal
+    avg_cost: Decimal | None
+    cost_pln: Decimal | None
     price: Decimal | None
     price_date: date | None
     market_value_pln: Decimal | None
@@ -95,7 +96,7 @@ class PortfolioSummary(BaseModel):
     value_prev_pln: Decimal | None
     change_1d_pln: Decimal | None
     change_1d_pct: Decimal | None
-    cost_pln: Decimal
+    cost_pln: Decimal | None
     pnl_pln: Decimal | None
     pnl_pct: Decimal | None
     xirr_pct: Decimal | None

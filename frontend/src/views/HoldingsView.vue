@@ -162,7 +162,7 @@
     </div>
     <div v-if="loading || removingAll" class="loading-state" role="status">
       <div class="loading-spinner"></div>
-      <p>Usuwanie pozycji...</p>
+      <p>{{ removingAll ? 'Usuwanie pozycji...' : 'Ładowanie pozycji...' }}</p>
     </div>
     <div v-else-if="!summary?.positions.length" class="empty-state">
       <div class="empty-icon">+</div>
@@ -258,7 +258,16 @@
                   {{ formatNumber(position.quantity) }}
                   {{ position.instrument.unit === 'gram' ? 'g' : 'szt.' }}
                 </td>
-                <td>{{ formatPrice(position.price) }} {{ position.instrument.currency }}</td>
+                <td>
+                  {{ formatPrice(position.price) }} {{ position.instrument.currency }}
+                  <small v-if="position.market_value_pln === null">
+                    {{
+                      position.price === null
+                        ? 'Brak zapisanego notowania'
+                        : `Brak kursu ${position.instrument.currency}/PLN`
+                    }}
+                  </small>
+                </td>
                 <td>
                   <strong>{{ formatCurrency(position.market_value_pln) }}</strong>
                 </td>

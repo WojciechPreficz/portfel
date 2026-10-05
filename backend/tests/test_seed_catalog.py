@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 
 from app.database import Base
 from app.models import Instrument, Price, Transaction
-from app.seed import GOLD_PURITIES, GPW_STOCK_TICKERS, NASDAQ_STOCKS, NYSE_STOCKS, POLISH_MARKET_INSTRUMENTS, SEED, STOOQ_SYMBOL_OVERRIDES, apply_instrument_defaults, seed_instruments
+from app.seed import GOLD_PURITIES, GPW_STOCK_TICKERS, NASDAQ_STOCKS, NYSE_STOCKS, POLISH_MARKET_INSTRUMENTS, SEED, apply_instrument_defaults, seed_instruments
+from app.services.symbol_aliases import STOOQ_SYMBOL_ALIASES, YAHOO_SYMBOL_ALIASES
 
 
 class SeedCatalogTest(unittest.TestCase):
@@ -25,7 +26,12 @@ class SeedCatalogTest(unittest.TestCase):
         self.assertIn("NEUCA", GPW_STOCK_TICKERS)
 
     def test_provider_symbol_override_for_11bit(self):
-        self.assertEqual(STOOQ_SYMBOL_OVERRIDES["11BIT"], "11b")
+        self.assertEqual(STOOQ_SYMBOL_ALIASES["11BIT"], "11b")
+        self.assertEqual(STOOQ_SYMBOL_ALIASES["AMBRA"], "amb")
+        self.assertEqual(STOOQ_SYMBOL_ALIASES["KRUK"], "kru")
+        self.assertEqual(STOOQ_SYMBOL_ALIASES["ZWC"], "zwc")
+        self.assertEqual(YAHOO_SYMBOL_ALIASES["AMBRA.WA"], "AMB.WA")
+        self.assertEqual(YAHOO_SYMBOL_ALIASES["KRUK.WA"], "KRU.WA")
 
         etf_tickers = {row["ticker"] for row in POLISH_MARKET_INSTRUMENTS["etf"]}
         self.assertIn("C6E", etf_tickers)

@@ -1,28 +1,18 @@
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.models import CashDeposit, Instrument, Portfolio, Transaction
 from app.schemas import TransactionCreate, TransactionImportResult, TransactionOut
-from app.seed import GPW_STOCK_TICKERS, apply_instrument_defaults
+from app.seed import apply_instrument_defaults
 from app.services.portfolio import _signed_qty
+from app.services.symbol_resolver import ResolutionError, resolve
 from app.services.transaction_import import read_bossa_purchases, read_deposits, read_purchases
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
-POLISH_IMPORT_TICKERS = set(GPW_STOCK_TICKERS) | {"NEU"}
-
-
-def _infer_import_instrument_type(ticker: str | None, raw_ticker: str, category: str | None) -> str:
-    if category == "etf":
-        return "etf"
-    if raw_ticker.endswith(".PL"):
-        return "stock_pl"
-    if ticker in POLISH_IMPORT_TICKERS:
-        return "stock_pl"
-    return "stock_us" if raw_ticker.endswith(".US") else "stock_pl"
 
 
 def _get_or_create_instrument(db: Session, payload: TransactionCreate) -> Instrument:
@@ -129,55 +119,34 @@ def import_transactions(
         return TransactionImportResult(imported=0, skipped=len(errors), errors=errors)
 
     transactions = []
+    imported_instrument_ids = set()
     for purchase in purchases:
-        instrument = None
-        if purchase["isin"]:
-            instrument = db.scalar(select(Instrument).where(Instrument.isin == purchase["isin"]))
-        if not instrument and purchase["ticker"]:
-            ticker_query = select(Instrument).where(Instrument.ticker == purchase["ticker"])
-            if purchase["ticker"] in POLISH_IMPORT_TICKERS:
-                ticker_query = ticker_query.where(Instrument.type == "stock_pl")
-            instrument = db.scalar(ticker_query)
-        if not instrument and purchase.get("name"):
-            normalized_name = purchase["name"].strip().lower()
-            instrument = db.scalar(
-                select(Instrument).where(func.lower(Instrument.name).like(f"{normalized_name}%"))
+        resolution = resolve(
+            db,
+            raw_ticker=purchase.get("raw_ticker"),
+            isin=purchase.get("isin"),
+            name=purchase.get("name"),
+            category=purchase.get("category"),
+            currency_hint=purchase.get("currency"),
+        )
+        if isinstance(resolution, ResolutionError):
+            errors.append(f"wiersz {purchase['row_number']}: {resolution.message}")
+            continue
+        instrument = db.get(Instrument, resolution.instrument_id) if resolution.instrument_id else None
+        if instrument is None:
+            instrument = Instrument(
+                ticker=resolution.ticker,
+                isin=purchase.get("isin"),
+                name=purchase.get("name") or resolution.ticker,
+                type=resolution.type,
+                currency=resolution.currency,
+                provider=resolution.provider,
+                symbol=resolution.symbol,
+                unit="share",
             )
-        if instrument and purchase.get("name") and purchase["name"].lower() != "my trades":
-            instrument.name = purchase["name"]
-        if (
-            instrument
-            and (purchase["ticker"] in POLISH_IMPORT_TICKERS or (purchase.get("raw_ticker") or "").endswith(".PL"))
-            and instrument.type != "stock_pl"
-        ):
-            instrument.type = "stock_pl"
-            instrument.currency = "PLN"
-            instrument.provider = "stooq"
-            instrument.symbol = purchase["ticker"].lower()
-            instrument.unit = "share"
-        if instrument and (purchase.get("raw_ticker") or "").endswith(".AS"):
-            instrument.provider = "yahoo"
-            instrument.symbol = purchase["raw_ticker"]
-        if not instrument:
-            raw_ticker = purchase.get("raw_ticker") or ""
-            category = purchase.get("category")
-            instrument_type = _infer_import_instrument_type(purchase["ticker"], raw_ticker, category)
-            if purchase["ticker"] and purchase.get("name"):
-                data = apply_instrument_defaults({
-                    "ticker": purchase["ticker"],
-                    "name": purchase["name"],
-                    "type": instrument_type,
-                    "currency": "USD" if raw_ticker.endswith(".US") else "EUR" if instrument_type == "etf" else "PLN",
-                    "provider": "yahoo" if instrument_type in {"stock_us", "etf"} else "stooq",
-                })
-                instrument = Instrument(**data)
-                if raw_ticker.endswith(".AS"):
-                    instrument.symbol = raw_ticker
-                db.add(instrument)
-                db.flush()
-            else:
-                errors.append(f"wiersz {purchase['row_number']}: nie znaleziono instrumentu {purchase['ticker'] or purchase['isin']}")
-                continue
+            db.add(instrument)
+            db.flush()
+        imported_instrument_ids.add(instrument.id)
         transactions.append(Transaction(
             portfolio_id=portfolio_id,
             instrument_id=instrument.id,
@@ -201,7 +170,13 @@ def import_transactions(
         for deposit in deposits
     )
     db.commit()
-    return TransactionImportResult(imported=len(transactions), deposits=len(deposits), skipped=0, errors=[])
+    return TransactionImportResult(
+        imported=len(transactions),
+        deposits=len(deposits),
+        skipped=0,
+        errors=[],
+        instrument_ids=sorted(imported_instrument_ids),
+    )
 
 
 @router.delete("/{transaction_id}")

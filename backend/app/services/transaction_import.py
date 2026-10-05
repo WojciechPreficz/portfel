@@ -6,6 +6,7 @@ import re
 
 from openpyxl import load_workbook
 
+from app.services.symbol_resolver import bossa_alias, normalise_ticker
 
 HEADER_ALIASES = {
     "date": {"data", "data transakcji", "data operacji", "data zawarcia", "data realizacji", "time", "open time utc", "trade date", "transaction date"},
@@ -25,15 +26,6 @@ HEADER_ALIASES = {
 STOCK_SPLITS = {
     "AVGO": ((date(2024, 7, 15), Decimal("10")),),
 }
-
-BOSSA_INSTRUMENTS = {
-    "vanguard lifestrategy 80 equity ucits etf": {
-        "ticker": "V80A",
-        "raw_ticker": "V80A.AS",
-        "isin": "IE00BMVB5R75",
-    },
-}
-
 
 def _normalise(value: object) -> str:
     text = str(value or "").strip().lower()
@@ -73,11 +65,7 @@ def _date(value: object, row_number: int) -> date:
 def _normalise_ticker(value: object) -> str | None:
     if not value:
         return None
-    ticker = str(value).strip().upper()
-    for suffix in (".US", ".PL"):
-        if ticker.endswith(suffix):
-            return ticker[: -len(suffix)]
-    return ticker
+    return normalise_ticker(str(value))
 
 
 def _apply_stock_splits(purchase: dict) -> dict:
@@ -217,7 +205,7 @@ def read_bossa_purchases(content: bytes) -> tuple[list[dict], list[str]]:
             name = row[headers["walor"]].strip()
             if not name:
                 raise ValueError(f"wiersz {row_number}: brak pola instrument")
-            instrument_match = BOSSA_INSTRUMENTS.get(_normalise(name), {})
+            instrument_match = bossa_alias(name) or {}
             purchases.append({
                 "row_number": row_number,
                 "date": _date(row[headers["data"]], row_number),

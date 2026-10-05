@@ -3,8 +3,12 @@ from datetime import date
 from decimal import Decimal
 from unittest.mock import Mock, patch
 
+import pandas as pd
+import yfinance as yf
+
 from app.routers.quotes import gold_quote
 from app.services.adapters.base import QuotePoint
+from app.services.adapters.stooq import STOOQ_URL, StooqAdapter
 from app.services.adapters.yahoo import YahooAdapter
 from app.services.portfolio import xirr
 from app.services.quotes import _fetch_history
@@ -32,103 +36,162 @@ class YahooAdapterTest(unittest.TestCase):
         fetch_last.assert_called_once_with("GC=F", "USD")
         fetch_fx.assert_called_once_with("USD")
 
-    @patch("app.services.adapters.yahoo.httpx.get")
-    def test_missing_symbol_returns_no_points(self, get):
-        response = Mock(status_code=404)
-        get.return_value = response
-
-        points = YahooAdapter().fetch_history("C6E.DE", date(2026, 1, 1), date(2026, 1, 2), "EUR")
-
-        self.assertEqual(points, [])
-        response.raise_for_status.assert_not_called()
-
-    @patch("app.services.adapters.yahoo.httpx.get")
-    def test_legacy_meud_fr_symbol_uses_milan_listing(self, get):
-        get.return_value = Mock(
-            status_code=200,
-            json=lambda: {
-                "chart": {
-                    "result": [
-                        {
-                            "timestamp": [1790164800],
-                            "indicators": {"adjclose": [{"adjclose": [316.1]}]},
-                        }
-                    ]
-                }
-            },
-        )
+    @patch("app.services.adapters.yahoo.yf.download")
+    def test_missing_symbol_returns_no_points(self, download):
+        download.return_value = pd.DataFrame()
 
         points = YahooAdapter().fetch_history(
+            "MISSING", date(2026, 1, 1), date(2026, 1, 2), "USD"
+        )
+
+        self.assertEqual(points, [])
+        download.assert_called_once()
+
+    @patch("app.services.adapters.yahoo.yf.Ticker")
+    @patch("app.services.adapters.yahoo.yf.download")
+    def test_batch_uses_nominal_close_and_market_currency(self, download, ticker):
+        index = pd.to_datetime(["2026-09-23"])
+        download.return_value = pd.DataFrame(
+            {
+                ("SAP.DE", "Close"): [182.5],
+                ("SAP.DE", "Adj Close"): [179.2],
+                ("MC.PA", "Close"): [777.0],
+            },
+            index=index,
+        )
+        ticker.side_effect = [
+            Mock(fast_info={"currency": "EUR"}),
+            Mock(fast_info={"currency": "EUR"}),
+        ]
+
+        points_by_symbol = YahooAdapter().fetch_many(
+            {
+                "SAP.DE": (date(2026, 9, 22), date(2026, 9, 23), "PLN"),
+                "MC.PA": (date(2026, 9, 22), date(2026, 9, 23), "EUR"),
+            }
+        )
+        points = points_by_symbol["SAP.DE"]
+
+        self.assertEqual(points[0].close, Decimal("182.5"))
+        self.assertEqual(points[0].currency, "EUR")
+        self.assertEqual(points_by_symbol["MC.PA"][0].close, Decimal("777.0"))
+        download.assert_called_once_with(
+            tickers=["SAP.DE", "MC.PA"],
+            start="2026-09-22",
+            end="2026-09-24",
+            auto_adjust=False,
+            group_by="ticker",
+            progress=False,
+        )
+
+    @patch("app.services.adapters.yahoo.yf.Ticker")
+    @patch("app.services.adapters.yahoo.yf.download")
+    def test_minor_currency_quotes_are_converted_to_major_units(self, download, ticker):
+        download.return_value = pd.DataFrame(
+            {"Close": [102.4]}, index=pd.to_datetime(["2026-09-23"])
+        )
+        ticker.return_value.fast_info = {"currency": "GBp"}
+
+        points = YahooAdapter().fetch_history(
+            "VOD.L", date(2026, 9, 22), date(2026, 9, 23), "GBP"
+        )
+
+        self.assertEqual(points[0].close, Decimal("1.024"))
+        self.assertEqual(points[0].currency, "GBP")
+
+    @patch("app.services.adapters.yahoo.time.sleep")
+    @patch("app.services.adapters.yahoo.yf.download")
+    def test_download_retries_http_rate_limit(self, download, sleep):
+        class RateLimitedError(Exception):
+            status_code = 429
+
+        download.side_effect = [
+            RateLimitedError("rate limit"),
+            pd.DataFrame(),
+        ]
+
+        points = YahooAdapter().fetch_history(
+            "SAP.DE", date(2026, 9, 22), date(2026, 9, 23), "EUR"
+        )
+
+        self.assertEqual(points, [])
+        self.assertEqual(download.call_count, 2)
+        sleep.assert_called_once_with(0.5)
+
+    @patch("app.services.adapters.yahoo.time.sleep")
+    @patch("app.services.adapters.yahoo.yf.download")
+    def test_download_retries_rate_limits_swallowed_by_yfinance(self, download, sleep):
+        def log_rate_limit(tickers, start, end, auto_adjust, group_by, progress):
+            del tickers, start, end, auto_adjust, group_by, progress
+            if download.call_count == 1:
+                yf.utils.get_yf_logger().error(
+                    "YFRateLimitError: Too Many Requests"
+                )
+            return pd.DataFrame()
+
+        download.side_effect = log_rate_limit
+
+        points = YahooAdapter().fetch_history(
+            "SAP.DE", date(2026, 9, 22), date(2026, 9, 23), "EUR"
+        )
+
+        self.assertEqual(points, [])
+        self.assertEqual(download.call_count, 2)
+        sleep.assert_called_once_with(0.5)
+
+    @patch("app.services.adapters.yahoo.yf.download")
+    def test_legacy_meud_fr_symbol_uses_central_alias(self, download):
+        download.return_value = pd.DataFrame()
+
+        YahooAdapter().fetch_history(
             "MEUD.FR", date(2026, 9, 22), date(2026, 9, 23), "EUR"
         )
 
-        self.assertEqual(points[0].close, Decimal("316.1"))
-        self.assertIn("/MEUD.MI", get.call_args.args[0])
+        self.assertEqual(download.call_args.kwargs["tickers"], ["MEUD.MI"])
+        self.assertEqual(YahooAdapter._canonical_symbol("11BIT.WA"), "11B.WA")
 
-    @patch("app.services.adapters.yahoo.httpx.get")
-    def test_legacy_polish_tickers_use_current_yahoo_listings(self, get):
-        get.return_value = Mock(status_code=404)
+    @patch("app.services.quotes.YahooAdapter.fetch_history")
+    @patch("app.services.quotes.get_adapter")
+    def test_polish_stock_without_stooq_data_falls_back_to_yahoo(
+        self, get_adapter, yahoo_fetch_history
+    ):
+        instrument = Mock(
+            provider="stooq",
+            type="stock_pl",
+            ticker="ACP",
+            currency="PLN",
+            symbol="acp",
+        )
+        get_adapter.return_value.fetch_history.return_value = []
+        yahoo_fetch_history.return_value = [
+            Mock(date=date(2026, 9, 23), close=Decimal("226.40"), currency="PLN")
+        ]
 
-        for legacy_symbol, yahoo_symbol in (
-            ("DEBICA.WA", "DBC.WA"),
-            ("ASSECOPOL.WA", "ACP.WA"),
-            ("ASSECCOPOL.WA", "ACP.WA"),
-        ):
-            with self.subTest(legacy_symbol=legacy_symbol):
-                points = YahooAdapter().fetch_history(
-                    legacy_symbol, date(2026, 9, 22), date(2026, 9, 23), "PLN"
-                )
+        result = _fetch_history(instrument, date(2026, 9, 22), date(2026, 9, 23))
 
-                self.assertEqual(points, [])
-                self.assertIn(f"/{yahoo_symbol}", get.call_args.args[0])
-
-    @patch("app.services.adapters.yahoo.httpx.get")
-    def test_current_market_price_is_used_when_available(self, get):
-        get.return_value = Mock(
-            status_code=200,
-            json=lambda: {
-                "chart": {
-                    "result": [
-                        {
-                            "meta": {"regularMarketPrice": 362.04, "regularMarketTime": 1790107202},
-                            "timestamp": [1790083800],
-                            "indicators": {"adjclose": [{"adjclose": [369.95]}]},
-                        }
-                    ]
-                }
-            },
+        self.assertEqual(result[0].close, Decimal("226.40"))
+        yahoo_fetch_history.assert_called_once_with(
+            "ACP.WA", date(2026, 9, 22), date(2026, 9, 23), "PLN"
         )
 
-        points = YahooAdapter().fetch_history(
-            "V", date(2026, 9, 22), date(2026, 9, 23), "USD"
+    @patch("app.services.quotes.YahooAdapter.fetch_history")
+    @patch("app.services.quotes.get_adapter")
+    def test_non_polish_stooq_symbol_does_not_get_polish_fallback(
+        self, get_adapter, yahoo_fetch_history
+    ):
+        instrument = Mock(
+            provider="stooq",
+            type="stock_intl",
+            ticker="SAP",
+            currency="EUR",
+            symbol="SAP.DE",
         )
+        get_adapter.return_value.fetch_history.side_effect = ValueError("not a GPW listing")
 
-        self.assertEqual(points[-1].close, Decimal("362.04"))
+        with self.assertRaisesRegex(ValueError, "not a GPW listing"):
+            _fetch_history(instrument, date(2026, 9, 22), date(2026, 9, 23))
 
-    @patch("app.services.adapters.yahoo.httpx.get")
-    def test_history_uses_close_when_yahoo_has_no_adjusted_closes(self, get):
-        get.return_value = Mock(
-            status_code=200,
-            json=lambda: {
-                "chart": {
-                    "result": [
-                        {
-                            "timestamp": [1790083800],
-                            "indicators": {
-                                "adjclose": [{"adjclose": [None]}],
-                                "quote": [{"close": [2650.0]}],
-                            },
-                        }
-                    ]
-                }
-            },
-        )
-
-        points = YahooAdapter().fetch_history(
-            "GC=F", date(2026, 9, 22), date(2026, 9, 23), "USD"
-        )
-
-        self.assertEqual(points[0].close, Decimal("2650.0"))
+        yahoo_fetch_history.assert_not_called()
 
     @patch("app.services.quotes.get_adapter")
     def test_gold_yahoo_ounce_price_is_converted_to_pure_gold_per_gram(self, get_adapter):
@@ -150,21 +213,31 @@ class YahooAdapterTest(unittest.TestCase):
             Decimal("2000") * Decimal("0.9999") / Decimal("31.1034768"),
         )
 
-    @patch("app.services.quotes.YahooAdapter.fetch_history")
-    @patch("app.services.quotes.get_adapter")
-    def test_polish_stock_without_stooq_data_falls_back_to_yahoo(self, get_adapter, yahoo_fetch_history):
-        instrument = Mock(
-            provider="stooq",
-            currency="PLN",
-            symbol="acp",
+
+class StooqAdapterTest(unittest.TestCase):
+    @patch("app.services.adapters.stooq.httpx.Client")
+    def test_history_request_is_limited_to_requested_dates(self, client_factory):
+        client = client_factory.return_value.__enter__.return_value
+        client.get.return_value.text = (
+            "Date,Open,High,Low,Close,Volume\n"
+            "2026-09-03,10,11,9,10.5,100\n"
         )
-        get_adapter.return_value.fetch_history.return_value = []
-        yahoo_fetch_history.return_value = [Mock(date=date(2026, 9, 23), close=Decimal("226.40"), currency="PLN")]
 
-        result = _fetch_history(instrument, date(2026, 9, 22), date(2026, 9, 23))
+        points = StooqAdapter().fetch_history(
+            "test", date(2026, 9, 1), date(2026, 9, 5), "PLN"
+        )
 
-        self.assertEqual(result[0].close, Decimal("226.40"))
-        yahoo_fetch_history.assert_called_once_with("ACP.WA", date(2026, 9, 22), date(2026, 9, 23), "PLN")
+        client.get.assert_called_once_with(
+            STOOQ_URL,
+            params={
+                "s": "test",
+                "i": "d",
+                "d1": "20260901",
+                "d2": "20260905",
+            },
+        )
+        self.assertEqual(points[0].date, date(2026, 9, 3))
+        self.assertEqual(points[0].close, Decimal("10.5"))
 
 
 class XirrTest(unittest.TestCase):

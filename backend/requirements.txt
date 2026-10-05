@@ -5,7 +5,7 @@ alembic==1.14.1
 pydantic==2.10.6
 pydantic-settings==2.8.1
 httpx==0.28.1
-yfinance==0.2.54
+yfinance==1.7.0
 apscheduler==3.11.0
 python-dateutil==2.9.0.post0
 tzdata==2025.1

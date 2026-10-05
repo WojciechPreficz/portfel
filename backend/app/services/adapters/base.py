@@ -12,6 +12,10 @@ class QuotePoint:
 
 
 class PriceAdapter(Protocol):
+    def fetch_many(
+        self, requests: dict[str, tuple[date, date, str]]
+    ) -> dict[str, list[QuotePoint]]: ...
+
     def fetch_history(
         self, symbol: str, start: date, end: date, currency: str
     ) -> list[QuotePoint]: ...

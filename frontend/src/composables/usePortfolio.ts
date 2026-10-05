@@ -226,8 +226,20 @@ export const usePortfolio = (portfolioId: ComputedRef<number | null>) => {
         notice.value = 'Import anulowany. Popraw wskazane wiersze i spróbuj ponownie.';
         return;
       }
-      notice.value = `Zaimportowano ${result.imported} zakupów i ${result.deposits} wpłat.`;
+      let importNotice = `Zaimportowano ${result.imported} transakcji i ${result.deposits} wpłat.`;
+      if (result.instrument_ids.length) {
+        try {
+          const quotes = await portfolioService.refreshQuotes(result.instrument_ids);
+          if (quotes.errors.length) {
+            importNotice += ` Notowania części instrumentów nie zostały odświeżone: ${quotes.errors.join('; ')}`;
+          }
+        } catch (reason) {
+          const detail = reason instanceof Error ? reason.message : 'nieznany błąd';
+          importNotice += ` Nie udało się pobrać notowań: ${detail}`;
+        }
+      }
       await loadData();
+      notice.value = importNotice;
     } catch (reason) {
       error.value =
         reason instanceof Error ? reason.message : 'Nie udało się zaimportować zakupów.';
