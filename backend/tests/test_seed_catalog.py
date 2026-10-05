@@ -1,6 +1,14 @@
 import unittest
+from datetime import date
+from decimal import Decimal
+from unittest.mock import patch
 
-from app.seed import GOLD_PURITIES, GPW_STOCK_TICKERS, NASDAQ_STOCKS, NYSE_STOCKS, POLISH_MARKET_INSTRUMENTS, SEED, STOOQ_SYMBOL_OVERRIDES, apply_instrument_defaults
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import Session
+
+from app.database import Base
+from app.models import Instrument, Price, Transaction
+from app.seed import GOLD_PURITIES, GPW_STOCK_TICKERS, NASDAQ_STOCKS, NYSE_STOCKS, POLISH_MARKET_INSTRUMENTS, SEED, STOOQ_SYMBOL_OVERRIDES, apply_instrument_defaults, seed_instruments
 
 
 class SeedCatalogTest(unittest.TestCase):
@@ -54,3 +62,98 @@ class SeedCatalogTest(unittest.TestCase):
 
         self.assertIn("ACP", stock_pl_tickers)
         self.assertNotIn("ACP", nyse_tickers)
+
+    def test_legacy_adm_mapping_is_corrected_without_losing_transactions(self):
+        engine = create_engine("sqlite:///:memory:")
+        Base.metadata.create_all(engine)
+        try:
+            with Session(engine) as db:
+                wrong_adm = Instrument(
+                    ticker="ADMA",
+                    name="ADM",
+                    type="stock_us_nyse",
+                    currency="USD",
+                    provider="yahoo",
+                    symbol="ADMA",
+                    unit="share",
+                )
+                correct_adm = Instrument(
+                    ticker="ADM",
+                    name="ARCHER-DANIELS-MIDLAND CO",
+                    type="stock_us_nyse",
+                    currency="USD",
+                    provider="yahoo",
+                    symbol="ADM",
+                    unit="share",
+                )
+                adma_biologics = Instrument(
+                    ticker="ADMA",
+                    name="ADMA Biologics Inc",
+                    type="stock_us",
+                    currency="USD",
+                    provider="yahoo",
+                    symbol="ADMA",
+                    unit="share",
+                )
+                db.add_all([wrong_adm, correct_adm, adma_biologics])
+                db.flush()
+                wrong_adm_id = wrong_adm.id
+                transaction = Transaction(
+                    portfolio_id=1,
+                    instrument_id=wrong_adm.id,
+                    type="BUY",
+                    quantity=Decimal("4"),
+                    price=Decimal("50"),
+                    currency="USD",
+                    date=date(2025, 1, 1),
+                    commission=Decimal("0"),
+                )
+                wrong_price = Price(
+                    instrument_id=wrong_adm.id,
+                    date=date(2025, 1, 1),
+                    close=Decimal("9.72"),
+                    currency="USD",
+                )
+                db.add_all([transaction, wrong_price])
+                db.commit()
+
+                with patch(
+                    "app.seed.SEED",
+                    [
+                        {
+                            "ticker": "ADM",
+                            "name": "ARCHER-DANIELS-MIDLAND CO",
+                            "type": "stock_us_nyse",
+                            "currency": "USD",
+                            "provider": "yahoo",
+                            "symbol": "ADM",
+                            "unit": "share",
+                        },
+                        {
+                            "ticker": "ADMA",
+                            "name": "ADMA Biologics Inc",
+                            "type": "stock_us",
+                            "currency": "USD",
+                            "provider": "yahoo",
+                            "symbol": "ADMA",
+                            "unit": "share",
+                        },
+                    ],
+                ):
+                    seed_instruments(db)
+
+                self.assertIsNone(db.get(Instrument, wrong_adm_id))
+                self.assertEqual(
+                    db.scalar(select(Transaction)).instrument_id, correct_adm.id
+                )
+                self.assertEqual(
+                    db.scalar(select(Instrument).where(Instrument.ticker == "ADM")).symbol,
+                    "ADM",
+                )
+                self.assertEqual(db.scalars(select(Price)).all(), [])
+                self.assertEqual(
+                    db.scalar(select(Instrument).where(Instrument.type == "stock_us")).name,
+                    "ADMA Biologics Inc",
+                )
+        finally:
+            engine.dispose()
