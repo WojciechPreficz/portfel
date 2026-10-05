@@ -35,3 +35,5 @@ Wymagane są Python 3.10 lub nowszy oraz Node.js.
 3. Otwórz adres wyświetlony przez Vite, domyślnie <http://127.0.0.1:5173>. Dokumentacja API FastAPI jest dostępna pod <http://127.0.0.1:8000/docs>.
 
 Frontend komunikuje się z API przez lokalny serwer proxy Vite. Przy pierwszym uruchomieniu backend tworzy bazę danych i uzupełnia katalog instrumentów.
+
+Ścieżkę do bazy można ustawić zmienną `PORTFEL_DB_PATH` przed uruchomieniem backendu. Domyślnie jest to `data/portfel.db` w katalogu głównym repozytorium; ścieżki względne podane w zmiennej również są liczone względem tego katalogu. Backend tworzy brakujący katalog docelowy podczas startu.

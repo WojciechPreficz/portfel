@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, select, text
 
-from app.config import DATA_DIR
+from app.config import DATABASE_PATH
 from app.database import SessionLocal, engine
 from app.models import Base, Portfolio
 from app.routers import fx, instruments, portfolio, quotes, transactions
@@ -62,7 +62,7 @@ def _scheduled_refresh():
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
