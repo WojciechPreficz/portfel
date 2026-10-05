@@ -12,14 +12,14 @@ Prywatna aplikacja do śledzenia inwestycji i ich wartości. Pozwala prowadzić 
 
 ## Uruchomienie lokalne
 
-Wymagane są Python 3.10 lub nowszy oraz Node.js.
+Zalecane są Python 3.13 oraz Node.js. Obecne przypięte zależności backendu nie obsługują poprawnie Pythona 3.14.
 
 1. W pierwszym terminalu zainstaluj zależności backendu i uruchom API:
 
    ```powershell
    cd backend
-   py -m venv .venv
-   .\.venv\Scripts\Activate.ps1
+   py -3.13 -m venv .venv-py313
+   .\.venv-py313\Scripts\Activate.ps1
    pip install -r requirements.txt
    uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
    ```
