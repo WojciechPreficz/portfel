@@ -4,6 +4,7 @@
   defineProps<{
     activeView: 'overview' | 'holdings';
     refreshing: boolean;
+    exportingCsv: boolean;
     portfolioName: string;
     hasPortfolio: boolean;
     portfolio: Portfolio | undefined;
@@ -11,6 +12,7 @@
 
   const emit = defineEmits<{
     refresh: [];
+    exportCsv: [];
     addPurchase: [];
     importPurchases: [];
     renamePortfolio: [portfolio: Portfolio];
@@ -37,6 +39,8 @@
     <div class="top-actions">
       <button class="button button-quiet" :disabled="refreshing" @click="$emit('refresh')">
         {{ refreshing ? 'Odświeżam...' : 'Odśwież notowania' }}</button
+      ><button class="button button-quiet" :disabled="exportingCsv" @click="$emit('exportCsv')">
+        {{ exportingCsv ? 'Eksportuję...' : 'Eksportuj CSV' }}</button
       ><template v-if="hasPortfolio"
         ><button class="button button-quiet" @click="$emit('importPurchases')">Importuj zakupy</button
         ><button class="button button-primary" @click="$emit('addPurchase')">+ Dodaj zakup</button></template

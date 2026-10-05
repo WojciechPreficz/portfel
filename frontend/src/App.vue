@@ -7,7 +7,7 @@
   import PortfolioAlerts from './components/PortfolioAlerts.vue';
   import RemovalModal from './components/RemovalModal.vue';
   import TransactionModal from './components/TransactionModal.vue';
-  import { createPortfolio as createPortfolioRequest, deletePortfolio as deletePortfolioRequest, getPortfolios, renamePortfolio as renamePortfolioRequest, type Portfolio } from './api';
+  import { createPortfolio as createPortfolioRequest, deletePortfolio as deletePortfolioRequest, getPortfolio, getPortfolios, renamePortfolio as renamePortfolioRequest, type Portfolio } from './api';
   import { usePortfolio } from './composables/usePortfolio';
 
   const route = useRoute();
@@ -29,6 +29,7 @@
   const portfolioName = computed(() => currentPortfolio.value?.name ?? 'Majątek');
   const showTransactionForm = ref(false);
   const showImportModal = ref(false);
+  const exportingCsv = ref(false);
   const {
     summary,
     loading,
@@ -116,6 +117,54 @@
     await removeAllPositions();
   };
 
+  const formatCsvNumber = (value: unknown, label: string, allowEmpty = false) => {
+    if (allowEmpty && (value == null || value === '')) return '';
+    if (
+      value == null ||
+      (typeof value === 'string' && !value.trim()) ||
+      !Number.isFinite(Number(value))
+    ) {
+      throw new Error(`Nieprawidłowa wartość pola „${label}” w danych portfela.`);
+    }
+    return Number(value).toFixed(2).replace('.', ',');
+  };
+
+  const exportPortfolioCsv = async () => {
+    exportingCsv.value = true;
+    error.value = '';
+    try {
+      const portfolio = await getPortfolio(null);
+      const rows = [
+        ['Ticker', 'ISIN', 'Nazwa', 'Waluta', 'Symbol', 'Ilość', 'Wartość PLN'],
+        ...portfolio.positions.map(({ instrument, quantity, market_value_pln }) => [
+          instrument.ticker,
+          instrument.isin,
+          instrument.name,
+          instrument.currency,
+          instrument.symbol,
+          formatCsvNumber(quantity, 'Ilość'),
+          formatCsvNumber(market_value_pln, 'Wartość PLN', true),
+        ]),
+      ];
+      const csv = `\uFEFF${rows
+        .map((row) =>
+          row.map((value) => `"${String(value ?? '').replaceAll('"', '""')}"`).join(';'),
+        )
+        .join('\r\n')}`;
+      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `instrumenty-portfelowe-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (reason) {
+      error.value =
+        reason instanceof Error ? reason.message : 'Nie udało się wyeksportować instrumentów.';
+    } finally {
+      exportingCsv.value = false;
+    }
+  };
+
   onMounted(loadPortfolios);
 </script>
 
@@ -130,10 +179,12 @@
       <AppHeader
         :active-view="activeView"
         :refreshing="refreshing"
+        :exporting-csv="exportingCsv"
         :portfolio-name="portfolioName"
         :has-portfolio="activePortfolioId !== null"
         :portfolio="currentPortfolio"
         @refresh="updateQuotes"
+        @export-csv="exportPortfolioCsv"
         @add-purchase="showTransactionForm = true"
         @import-purchases="showImportModal = true"
         @rename-portfolio="renamePortfolio"
