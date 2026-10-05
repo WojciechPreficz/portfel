@@ -15,6 +15,7 @@ from app.seed import GOLD_PURITIES
 TROY_OUNCE_GRAMS = Decimal("31.1034768")
 INCREMENTAL_BUFFER_DAYS = 5
 MAX_CONCURRENT_STOOQ_REQUESTS = 8
+UNQUOTED_INSTRUMENT_TICKERS = {"ZWC"}
 
 
 def _upsert_price(db: Session, instrument_id: int, d: date, close: Decimal, currency: str) -> bool:
@@ -145,7 +146,11 @@ def refresh_quotes(
         instruments_query = select(Instrument).where(Instrument.id.in_(instrument_ids))
     else:
         instruments_query = select(Instrument).where(Instrument.id == -1)
-    instruments = list(db.scalars(instruments_query).all())
+    instruments = [
+        instrument
+        for instrument in db.scalars(instruments_query).all()
+        if instrument.ticker.upper() not in UNQUOTED_INSTRUMENT_TICKERS
+    ]
     starts = {
         instrument.id: _instrument_start(db, instrument, end, years)
         for instrument in instruments

@@ -6,6 +6,7 @@
 
   defineEmits<{
     retry: [];
+    dismiss: [];
   }>();
 </script>
 
@@ -14,5 +15,10 @@
     {{ error }}
     <button @click="$emit('retry')">Spróbuj ponownie</button>
   </div>
-  <div v-if="notice" class="alert alert-notice">{{ notice }}</div>
+  <div v-if="notice" class="alert alert-notice">
+    <span>{{ notice }}</span>
+    <button class="alert-dismiss" aria-label="Zamknij powiadomienie" @click="$emit('dismiss')">
+      ×
+    </button>
+  </div>
 </template>

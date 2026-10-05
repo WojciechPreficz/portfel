@@ -51,8 +51,8 @@ export const usePortfolio = (portfolioId: ComputedRef<number | null>) => {
     instruments.value.filter((instrument) => instrument.type === form.value.marketType),
   );
 
-  const loadData = async () => {
-    loading.value = true;
+  const loadData = async (showLoading = true) => {
+    if (showLoading) loading.value = true;
     error.value = '';
     try {
       const [portfolio, history, catalog] = await portfolioService.loadSnapshot(portfolioId.value);
@@ -60,10 +60,12 @@ export const usePortfolio = (portfolioId: ComputedRef<number | null>) => {
       instruments.value = catalog;
       historyDates.value = history.map((point) => point.date);
       historyValues.value = history.map((point) => point.value_pln);
+      return true;
     } catch (reason) {
       error.value = reason instanceof Error ? reason.message : 'Nie udało się pobrać danych.';
+      return false;
     } finally {
-      loading.value = false;
+      if (showLoading) loading.value = false;
     }
   };
 
@@ -203,16 +205,24 @@ export const usePortfolio = (portfolioId: ComputedRef<number | null>) => {
     notice.value = 'Pobieram najnowsze notowania...';
     try {
       const result = await portfolioService.refreshQuotes();
+      const dataLoaded = await loadData(false);
+      if (!dataLoaded) {
+        notice.value = '';
+        return;
+      }
       notice.value = result.errors.length
         ? `Odświeżono częściowo. Błędy: ${result.errors.join('; ')}`
         : 'Notowania zostały odświeżone.';
-      await loadData();
     } catch (reason) {
       error.value = reason instanceof Error ? reason.message : 'Nie udało się odświeżyć notowań.';
       notice.value = '';
     } finally {
       refreshing.value = false;
     }
+  };
+
+  const dismissNotice = () => {
+    notice.value = '';
   };
 
   const importPurchases = async (file: File, source: 'xstation5' | 'bossa') => {
@@ -247,7 +257,7 @@ export const usePortfolio = (portfolioId: ComputedRef<number | null>) => {
     }
   };
 
-  watch(portfolioId, loadData, { immediate: true });
+  watch(portfolioId, () => loadData(), { immediate: true });
 
   return {
     summary,
@@ -272,6 +282,7 @@ export const usePortfolio = (portfolioId: ComputedRef<number | null>) => {
     removeAllPositions,
     resetMarketSelection,
     updateQuotes,
+    dismissNotice,
     importPurchases,
   };
 };

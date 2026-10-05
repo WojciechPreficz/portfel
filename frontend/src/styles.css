@@ -609,8 +609,22 @@ footer {
   margin-left: 10px;
 }
 .alert-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   color: #546c34;
   background: #eaf4d7;
+}
+.alert-dismiss {
+  flex: 0 0 auto;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
 }
 .skeleton {
   animation: pulse 1.3s infinite alternate;

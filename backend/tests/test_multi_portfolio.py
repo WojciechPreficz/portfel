@@ -108,6 +108,53 @@ class MultiPortfolioTest(unittest.TestCase):
             {"TEST.WA": (date.today() - timedelta(days=5), date.today(), "PLN")}
         )
 
+    def test_quote_refresh_skips_removed_zwc_instrument(self):
+        zwc = Instrument(
+            ticker="ZWC",
+            name="ZWC",
+            type="stock_pl",
+            currency="PLN",
+            provider="stooq",
+            symbol="zwc",
+            unit="share",
+        )
+        self.db.add(zwc)
+        self.db.flush()
+        self.db.add(
+            Transaction(
+                portfolio_id=self.first.id,
+                instrument_id=zwc.id,
+                type="BUY",
+                quantity=Decimal("1"),
+                price=Decimal("10"),
+                currency="PLN",
+                date=date.today(),
+                commission=Decimal("0"),
+            )
+        )
+        self.db.commit()
+
+        with patch("app.services.quotes.get_adapter") as get_adapter:
+            get_adapter.return_value.fetch_history.return_value = [
+                QuotePoint(
+                    date=date.today(),
+                    close=Decimal("12"),
+                    currency="PLN",
+                )
+            ]
+            result = refresh_quotes(self.db)
+            selected_result = refresh_quotes(self.db, instrument_ids=[zwc.id])
+
+        self.assertEqual(result["instruments"], 1)
+        self.assertEqual(result["errors"], [])
+        self.assertEqual(selected_result["instruments"], 0)
+        self.assertEqual(selected_result["errors"], [])
+        requested_symbols = [
+            call.args[0]
+            for call in get_adapter.return_value.fetch_history.call_args_list
+        ]
+        self.assertEqual(requested_symbols, ["test"])
+
     @patch("app.services.quotes.fetch_fx_history", return_value=[])
     @patch("app.services.quotes.YahooAdapter.fetch_many", return_value={})
     @patch("app.services.quotes.get_adapter")

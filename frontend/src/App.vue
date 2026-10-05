@@ -36,6 +36,7 @@
     refreshing,
     error,
     notice,
+    dismissNotice,
     historyDates,
     historyValues,
     form,
@@ -138,7 +139,12 @@
         @rename-portfolio="renamePortfolio"
         @delete-portfolio="deletePortfolio"
       />
-      <PortfolioAlerts :error="error" :notice="notice" @retry="loadData" />
+      <PortfolioAlerts
+        :error="error"
+        :notice="notice"
+        @retry="loadData"
+        @dismiss="dismissNotice"
+      />
       <RouterView v-slot="{ Component }">
         <component
           :is="Component"
