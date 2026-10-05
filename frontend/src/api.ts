@@ -62,17 +62,70 @@ export type GoldQuote = {
   price_pln_g: number;
 };
 
+export type ApiErrorHandler = {
+  onUnauthorized?: () => void;
+  onRateLimited?: () => void;
+};
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+let apiErrorHandler: ApiErrorHandler = {};
+
+export const setApiErrorHandler = (handler: ApiErrorHandler) => {
+  apiErrorHandler = handler;
+};
+
 const api = async <T>(path: string, options?: RequestInit): Promise<T> => {
   const response = await fetch(path, {
     headers: options?.body instanceof FormData ? undefined : { 'Content-Type': 'application/json' },
     ...options,
+    credentials: 'include',
   });
+  if (response.status === 401 && !path.startsWith('/api/auth/')) {
+    apiErrorHandler.onUnauthorized?.();
+  }
+  if (response.status === 429) {
+    apiErrorHandler.onRateLimited?.();
+  }
   if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(detail || `Błąd API (${response.status})`);
+    const body = await response.text();
+    let message = body || `Błąd API (${response.status})`;
+    try {
+      const parsed: unknown = JSON.parse(body);
+      if (
+        typeof parsed === 'object' &&
+        parsed !== null &&
+        'detail' in parsed &&
+        typeof parsed.detail === 'string'
+      ) {
+        message = parsed.detail;
+      }
+    } catch {
+      // Non-JSON error responses are displayed as-is.
+    }
+    if (response.status === 429) {
+      message = 'Zbyt wiele prób. Spróbuj ponownie później.';
+    }
+    throw new ApiError(message, response.status);
   }
   return response.json() as Promise<T>;
 };
+
+export const getAuthStatus = () => api<{ authenticated: boolean }>('/api/auth/me');
+export const login = (password: string) =>
+  api<{ authenticated: boolean }>('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ password }),
+  });
+export const logout = () => api<{ authenticated: boolean }>('/api/auth/logout', { method: 'POST' });
 
 const portfolioQuery = (portfolioId: number | null) =>
   portfolioId === null ? '' : `?portfolio_id=${portfolioId}`;
@@ -123,13 +176,10 @@ export const importTransactions = (
     skipped: number;
     errors: string[];
     instrument_ids: number[];
-  }>(
-    '/api/transactions/import',
-    {
-      method: 'POST',
-      body,
-    },
-  );
+  }>('/api/transactions/import', {
+    method: 'POST',
+    body,
+  });
 };
 
 export const refreshQuotes = (instrumentIds?: number[]) => {

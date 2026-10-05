@@ -17,6 +17,7 @@
     importPurchases: [];
     renamePortfolio: [portfolio: Portfolio];
     deletePortfolio: [portfolio: Portfolio];
+    logout: [];
   }>();
 
   const currentDateLabel = new Intl.DateTimeFormat('pl-PL', {
@@ -27,7 +28,6 @@
   })
     .format(new Date())
     .toLocaleUpperCase('pl-PL');
-
 </script>
 
 <template>
@@ -42,15 +42,24 @@
       ><button class="button button-quiet" :disabled="exportingCsv" @click="$emit('exportCsv')">
         {{ exportingCsv ? 'Eksportuję...' : 'Eksportuj CSV' }}</button
       ><template v-if="hasPortfolio"
-        ><button class="button button-quiet" @click="$emit('importPurchases')">Importuj zakupy</button
-        ><button class="button button-primary" @click="$emit('addPurchase')">+ Dodaj zakup</button></template
+        ><button class="button button-quiet" @click="$emit('importPurchases')">
+          Importuj zakupy</button
+        ><button class="button button-primary" @click="$emit('addPurchase')">
+          + Dodaj zakup
+        </button></template
       >
       <div v-if="portfolio" class="portfolio-actions">
-        <button class="portfolio-action" @click="$emit('renamePortfolio', portfolio)">Zmień nazwę</button>
-        <button class="portfolio-action portfolio-action-delete" @click="$emit('deletePortfolio', portfolio)">
+        <button class="portfolio-action" @click="$emit('renamePortfolio', portfolio)">
+          Zmień nazwę
+        </button>
+        <button
+          class="portfolio-action portfolio-action-delete"
+          @click="$emit('deletePortfolio', portfolio)"
+        >
           Usuń portfel
         </button>
       </div>
+      <button class="button button-quiet" @click="$emit('logout')">Wyloguj</button>
     </div>
   </header>
 </template>

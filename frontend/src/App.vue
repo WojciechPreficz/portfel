@@ -1,17 +1,34 @@
 <script setup lang="ts">
   import { computed, onMounted, ref } from 'vue';
   import { useRoute, useRouter } from 'vue-router';
+  import AuthScreen from './components/AuthScreen.vue';
   import AppHeader from './components/AppHeader.vue';
   import AppSidebar from './components/AppSidebar.vue';
   import ImportModal from './components/ImportModal.vue';
   import PortfolioAlerts from './components/PortfolioAlerts.vue';
   import RemovalModal from './components/RemovalModal.vue';
   import TransactionModal from './components/TransactionModal.vue';
-  import { createPortfolio as createPortfolioRequest, deletePortfolio as deletePortfolioRequest, getPortfolio, getPortfolios, renamePortfolio as renamePortfolioRequest, type Portfolio } from './api';
+  import {
+    ApiError,
+    createPortfolio as createPortfolioRequest,
+    deletePortfolio as deletePortfolioRequest,
+    getAuthStatus,
+    getPortfolio,
+    getPortfolios,
+    login as loginRequest,
+    logout as logoutRequest,
+    renamePortfolio as renamePortfolioRequest,
+    setApiErrorHandler,
+    type Portfolio,
+  } from './api';
   import { usePortfolio } from './composables/usePortfolio';
 
   const route = useRoute();
   const router = useRouter();
+  const authStatus = ref<'checking' | 'authenticated' | 'unauthenticated'>('checking');
+  const isAuthenticated = computed(() => authStatus.value === 'authenticated');
+  const authMessage = ref('');
+  const loginSubmitting = ref(false);
   const activeView = computed<'overview' | 'holdings'>(() =>
     route.name === 'portfolio-holdings' || route.name === 'aggregate-holdings'
       ? 'holdings'
@@ -54,7 +71,23 @@
     resetMarketSelection,
     updateQuotes,
     importPurchases,
-  } = usePortfolio(activePortfolioId);
+  } = usePortfolio(activePortfolioId, isAuthenticated);
+
+  setApiErrorHandler({
+    onUnauthorized: () => {
+      authStatus.value = 'unauthenticated';
+      authMessage.value = 'Sesja wygasła';
+      loginSubmitting.value = false;
+    },
+    onRateLimited: () => {
+      const message = 'Zbyt wiele prób. Spróbuj ponownie później.';
+      if (authStatus.value === 'authenticated') {
+        error.value = message;
+      } else {
+        authMessage.value = message;
+      }
+    },
+  });
 
   const loadPortfolios = async () => {
     try {
@@ -83,7 +116,8 @@
       await renamePortfolioRequest(portfolio.id, name.trim());
       await loadPortfolios();
     } catch (reason) {
-      error.value = reason instanceof Error ? reason.message : 'Nie udało się zmienić nazwy portfela.';
+      error.value =
+        reason instanceof Error ? reason.message : 'Nie udało się zmienić nazwy portfela.';
     }
   };
 
@@ -165,11 +199,66 @@
     }
   };
 
-  onMounted(loadPortfolios);
+  const submitLogin = async (password: string) => {
+    loginSubmitting.value = true;
+    authMessage.value = '';
+    try {
+      await loginRequest(password);
+      authStatus.value = 'authenticated';
+      await loadPortfolios();
+    } catch (reason) {
+      authMessage.value =
+        reason instanceof ApiError && reason.status === 401
+          ? 'Nieprawidłowe hasło.'
+          : reason instanceof Error
+            ? reason.message
+            : 'Nie udało się zalogować.';
+    } finally {
+      loginSubmitting.value = false;
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await logoutRequest();
+      portfolios.value = [];
+      authMessage.value = '';
+      authStatus.value = 'unauthenticated';
+    } catch (reason) {
+      error.value = reason instanceof Error ? reason.message : 'Nie udało się wylogować.';
+    }
+  };
+
+  onMounted(async () => {
+    try {
+      const session = await getAuthStatus();
+      if (!session.authenticated) {
+        authStatus.value = 'unauthenticated';
+        return;
+      }
+      authStatus.value = 'authenticated';
+      await loadPortfolios();
+    } catch (reason) {
+      authStatus.value = 'unauthenticated';
+      authMessage.value =
+        reason instanceof ApiError && reason.status === 401
+          ? ''
+          : reason instanceof Error
+            ? reason.message
+            : 'Nie udało się sprawdzić sesji.';
+    }
+  });
 </script>
 
 <template>
-  <div class="app-shell">
+  <AuthScreen
+    v-if="authStatus !== 'authenticated'"
+    :checking="authStatus === 'checking'"
+    :submitting="loginSubmitting"
+    :message="authMessage"
+    @submit="submitLogin"
+  />
+  <div v-else class="app-shell">
     <AppSidebar
       :portfolios="portfolios"
       :active-portfolio-id="activePortfolioId"
@@ -189,13 +278,9 @@
         @import-purchases="showImportModal = true"
         @rename-portfolio="renamePortfolio"
         @delete-portfolio="deletePortfolio"
+        @logout="logout"
       />
-      <PortfolioAlerts
-        :error="error"
-        :notice="notice"
-        @retry="loadData"
-        @dismiss="dismissNotice"
-      />
+      <PortfolioAlerts :error="error" :notice="notice" @retry="loadData" @dismiss="dismissNotice" />
       <RouterView v-slot="{ Component }">
         <component
           :is="Component"
@@ -207,7 +292,11 @@
           :is-aggregate="activePortfolioId === null"
           @add-purchase="showTransactionForm = true"
           @create-portfolio="createPortfolio"
-          @show-holdings="router.push(activePortfolioId ? `/portfolios/${activePortfolioId}/holdings` : '/holdings')"
+          @show-holdings="
+            router.push(
+              activePortfolioId ? `/portfolios/${activePortfolioId}/holdings` : '/holdings',
+            )
+          "
           @remove-position="openRemovalForm"
           @remove-all="confirmRemoveAll"
         />
@@ -228,7 +317,12 @@
     <ImportModal
       v-if="showImportModal"
       @close="showImportModal = false"
-      @submit="(file, source) => { showImportModal = false; importPurchases(file, source); }"
+      @submit="
+        (file, source) => {
+          showImportModal = false;
+          importPurchases(file, source);
+        }
+      "
     />
     <RemovalModal
       v-if="positionToRemove"

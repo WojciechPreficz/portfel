@@ -32,7 +32,10 @@ const emptyTransactionForm = (): TransactionForm => ({
 
 const TROY_OUNCE_GRAMS = 31.1034768;
 
-export const usePortfolio = (portfolioId: ComputedRef<number | null>) => {
+export const usePortfolio = (
+  portfolioId: ComputedRef<number | null>,
+  enabled: ComputedRef<boolean>,
+) => {
   const summary = ref<PortfolioSummary | null>(null);
   const instruments = ref<Instrument[]>([]);
   const loading = ref(true);
@@ -257,7 +260,17 @@ export const usePortfolio = (portfolioId: ComputedRef<number | null>) => {
     }
   };
 
-  watch(portfolioId, () => loadData(), { immediate: true });
+  watch(
+    [portfolioId, enabled],
+    ([, isEnabled]) => {
+      if (isEnabled) {
+        void loadData();
+      } else {
+        loading.value = false;
+      }
+    },
+    { immediate: true },
+  );
 
   return {
     summary,

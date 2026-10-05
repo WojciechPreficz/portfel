@@ -4,11 +4,12 @@ from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, select, text
 
-from app.config import DATABASE_PATH
+from app.auth import require_auth, router as auth_router, validate_auth_configuration
+from app.config import DATABASE_PATH, PORTFEL_AUTH_DISABLED
 from app.database import SessionLocal, engine
 from app.models import Base, Portfolio
 from app.routers import fx, instruments, portfolio, quotes, transactions
@@ -62,6 +63,7 @@ def _scheduled_refresh():
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    validate_auth_configuration()
     DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
@@ -87,7 +89,13 @@ async def lifespan(_app: FastAPI):
     scheduler.shutdown(wait=False)
 
 
-app = FastAPI(title="Portfel", lifespan=lifespan)
+app = FastAPI(
+    title="Portfel",
+    lifespan=lifespan,
+    docs_url="/docs" if PORTFEL_AUTH_DISABLED else None,
+    redoc_url="/redoc" if PORTFEL_AUTH_DISABLED else None,
+    openapi_url="/openapi.json" if PORTFEL_AUTH_DISABLED else None,
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],
@@ -95,14 +103,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.include_router(instruments.router)
-app.include_router(transactions.router)
-app.include_router(portfolio.router)
-app.include_router(portfolio.portfolios_router)
-app.include_router(quotes.router)
-app.include_router(fx.router)
+protected_routers = (
+    instruments.router,
+    transactions.router,
+    portfolio.router,
+    portfolio.portfolios_router,
+    quotes.router,
+    fx.router,
+)
+for router in protected_routers:
+    app.include_router(router, dependencies=[Depends(require_auth)])
+app.include_router(auth_router)
 
 
-@app.get("/api/health")
+@app.get("/api/health", dependencies=[Depends(require_auth)])
 def health():
     return {"ok": True}
