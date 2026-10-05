@@ -1,0 +1,10 @@
+data/*.db
+data/*.db-*
+data/*.sqlite*
+*.xlsx
+*.csv
+.env
+.env.*
+backend/.venv/
+frontend/node_modules/
+__pycache__/
