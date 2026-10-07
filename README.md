@@ -57,8 +57,18 @@ Zalecane są Python 3.13 oraz Node.js. Obecne przypięte zależności backendu n
      lokalnego developmentu; domyślnie `false` i nie może być włączone w produkcji.
    - `PORTFEL_ENV` — środowisko aplikacji; domyślnie `development`. Wartość
      `production` włącza domyślnie `PORTFEL_COOKIE_SECURE`.
-   - `PORTFEL_DB_PATH` — ścieżka do bazy SQLite; domyślnie `data/portfel.db`
-     w katalogu głównym repozytorium.
+   - `PORTFEL_DATABASE_PATH` — ścieżka do bazy SQLite; domyślnie
+     `data/portfel.db` w katalogu głównym repozytorium. Akceptuje ścieżki
+     względne i bezwzględne. Dla zgodności nadal obsługiwana jest starsza nazwa
+     `PORTFEL_DB_PATH` (ustawienie `PORTFEL_DATABASE_PATH` ma pierwszeństwo).
+   - `PORTFEL_CORS_ORIGINS` — dozwolone origins rozdzielone przecinkami;
+     domyślnie `http://127.0.0.1:5173,http://localhost:5173`. Pusta wartość
+     wyłącza dodatkowe origins CORS, co jest właściwe, gdy frontend i API są
+     dostępne pod tą samą domeną.
+   - `PORTFEL_FRONTEND_DIR` — katalog z zbudowanym frontendem; domyślnie
+     `backend/frontend_dist` względem katalogu głównego repozytorium.
+   - `PORTFEL_SCHEDULER_ENABLED` — włącza zaplanowane odświeżanie notowań;
+     domyślnie `true`.
 
    Po aktywowaniu środowiska wirtualnego backendu hash hasła i klucz wygenerujesz
    z katalogu głównego repozytorium:
@@ -97,11 +107,23 @@ Zalecane są Python 3.13 oraz Node.js. Obecne przypięte zależności backendu n
 
    To ustawienie jest przeznaczone wyłącznie do lokalnego developmentu; nie używaj
    go w produkcji. **Na produkcji `PORTFEL_COOKIE_SECURE` musi mieć wartość `true`,
-   a aplikacja musi działać za HTTPS.**
+   a aplikacja musi działać za HTTPS.** Ciasteczko sesji ma flagi `HttpOnly` i
+   `SameSite=Strict`.
 
-   Frontend komunikuje się z API przez lokalny serwer proxy Vite. Przy pierwszym uruchomieniu backend tworzy bazę danych i uzupełnia katalog instrumentów.
+   Frontend lokalny komunikuje się z API przez serwer proxy Vite. Wdrożenie
+   serwujące frontend i API pod jedną domeną nie wymaga CORS; listę dodatkowych
+   originów można ustawić przez `PORTFEL_CORS_ORIGINS`. Przy pierwszym uruchomieniu
+   backend tworzy bazę danych i uzupełnia katalog instrumentów.
 
-Ścieżkę do bazy można ustawić zmienną `PORTFEL_DB_PATH` przed uruchomieniem backendu. Domyślnie jest to `data/portfel.db` w katalogu głównym repozytorium; ścieżki względne podane w zmiennej również są liczone względem tego katalogu. Backend tworzy brakujący katalog docelowy podczas startu.
+Ścieżkę do bazy można ustawić zmienną `PORTFEL_DATABASE_PATH` przed
+uruchomieniem backendu. Domyślnie jest to `data/portfel.db` w katalogu głównym
+repozytorium; ścieżki względne podane w zmiennej również są liczone względem
+tego katalogu. Backend tworzy brakujący katalog docelowy podczas startu.
+
+Przykładowy plik ze zmiennymi dla wdrożenia znajduje się w
+[`backend/.env.example`](backend/.env.example). Nie zawiera on prawdziwych
+sekretów; uzupełnij hash hasła i klucz przed uruchomieniem z włączonym
+uwierzytelnianiem.
 
 Wszystkie trasy API poza `POST /api/auth/login` i `POST /api/auth/logout`
 wymagają zalogowania; obejmuje to również `GET /api/auth/me` i `GET /api/health`.

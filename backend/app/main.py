@@ -1,15 +1,26 @@
 from contextlib import asynccontextmanager
 import logging
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-from fastapi import Depends, FastAPI
+from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.routing import APIRoute
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect, select, text
+from starlette.routing import Match
 
 from app.auth import require_auth, router as auth_router, validate_auth_configuration
-from app.config import DATABASE_PATH, PORTFEL_AUTH_DISABLED
+from app.config import (
+    DATABASE_PATH,
+    PORTFEL_AUTH_DISABLED,
+    PORTFEL_CORS_ORIGINS,
+    PORTFEL_FRONTEND_DIR,
+    PORTFEL_SCHEDULER_ENABLED,
+)
 from app.database import SessionLocal, engine
 from app.models import Base, Portfolio
 from app.routers import fx, instruments, portfolio, quotes, transactions
@@ -18,6 +29,54 @@ from app.services.quotes import refresh_quotes
 
 scheduler = BackgroundScheduler(timezone=ZoneInfo("Europe/Warsaw"))
 logger = logging.getLogger(__name__)
+
+
+class FrontendRoute(APIRoute):
+    def matches(self, scope):
+        path = scope["path"]
+        excluded_prefixes = ("/api", auth_router.prefix.rstrip("/"))
+        if any(
+            path == prefix or path.startswith(f"{prefix}/")
+            for prefix in excluded_prefixes
+        ):
+            return Match.NONE, {}
+        return super().matches(scope)
+
+
+def mount_frontend(app: FastAPI, frontend_dir: Path) -> None:
+    if not frontend_dir.is_dir():
+        return
+
+    frontend_root = frontend_dir.resolve()
+    app.mount(
+        "/assets",
+        StaticFiles(directory=frontend_root / "assets", check_dir=False),
+        name="frontend-assets",
+    )
+
+    def serve_frontend(full_path: str):
+        candidate = (frontend_root / full_path).resolve()
+        try:
+            candidate.relative_to(frontend_root)
+        except ValueError:
+            raise HTTPException(status_code=404, detail="Not Found") from None
+
+        if candidate.is_file():
+            return FileResponse(candidate)
+
+        index_file = frontend_root / "index.html"
+        if not index_file.is_file():
+            raise HTTPException(status_code=404, detail="Not Found")
+        return FileResponse(index_file)
+
+    frontend_router = APIRouter(route_class=FrontendRoute)
+    frontend_router.add_api_route(
+        "/{full_path:path}",
+        serve_frontend,
+        methods=["GET"],
+        include_in_schema=False,
+    )
+    app.include_router(frontend_router)
 
 
 def _ensure_portfolio_schema(db):
@@ -61,32 +120,49 @@ def _scheduled_refresh():
         db.close()
 
 
-@asynccontextmanager
-async def lifespan(_app: FastAPI):
+def initialize() -> None:
     validate_auth_configuration()
     DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    Base.metadata.create_all(bind=engine)
-    db = SessionLocal()
+
+    connection = engine.connect()
     try:
-        _ensure_portfolio_schema(db)
-        seed_instruments(db)
+        connection.exec_driver_sql("PRAGMA busy_timeout = 30000")
+        connection.exec_driver_sql("BEGIN IMMEDIATE")
+        Base.metadata.create_all(bind=connection)
+        db = SessionLocal(bind=connection)
+        try:
+            _ensure_portfolio_schema(db)
+            seed_instruments(db)
+        finally:
+            db.close()
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
     finally:
-        db.close()
-    scheduler.add_job(
-        _scheduled_refresh,
-        CronTrigger(hour=17, minute=10, timezone="Europe/Warsaw"),
-        id="refresh_gpw",
-        replace_existing=True,
-    )
-    scheduler.add_job(
-        _scheduled_refresh,
-        CronTrigger(hour=22, minute=10, timezone="Europe/Warsaw"),
-        id="refresh_us",
-        replace_existing=True,
-    )
-    scheduler.start()
+        connection.close()
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    initialize()
+    if PORTFEL_SCHEDULER_ENABLED:
+        scheduler.add_job(
+            _scheduled_refresh,
+            CronTrigger(hour=17, minute=10, timezone="Europe/Warsaw"),
+            id="refresh_gpw",
+            replace_existing=True,
+        )
+        scheduler.add_job(
+            _scheduled_refresh,
+            CronTrigger(hour=22, minute=10, timezone="Europe/Warsaw"),
+            id="refresh_us",
+            replace_existing=True,
+        )
+        scheduler.start()
     yield
-    scheduler.shutdown(wait=False)
+    if PORTFEL_SCHEDULER_ENABLED:
+        scheduler.shutdown(wait=False)
 
 
 app = FastAPI(
@@ -98,7 +174,7 @@ app = FastAPI(
 )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],
+    allow_origins=PORTFEL_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -119,3 +195,6 @@ app.include_router(auth_router)
 @app.get("/api/health", dependencies=[Depends(require_auth)])
 def health():
     return {"ok": True}
+
+
+mount_frontend(app, PORTFEL_FRONTEND_DIR)

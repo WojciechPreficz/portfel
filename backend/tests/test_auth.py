@@ -1,16 +1,18 @@
 import re
 from collections.abc import Iterator
 from pathlib import Path
+from unittest.mock import Mock
 
 import bcrypt
 import pytest
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import sessionmaker
 
 from app import auth
 from app import database, main
+from app.models import Instrument
 
 
 @pytest.fixture
@@ -168,3 +170,40 @@ def test_application_can_start_without_auth_settings_when_auth_is_disabled(
 
     with TestClient(main.app):
         pass
+
+
+def test_initialize_is_idempotent(
+    auth_settings: str,
+    test_database: Path,
+) -> None:
+    main.initialize()
+    with main.SessionLocal() as db:
+        first_count = db.scalar(select(func.count()).select_from(Instrument))
+
+    main.initialize()
+    with main.SessionLocal() as db:
+        second_count = db.scalar(select(func.count()).select_from(Instrument))
+
+    assert first_count is not None and first_count > 0
+    assert second_count == first_count
+
+
+def test_scheduler_does_not_start_when_disabled(
+    auth_settings: str,
+    test_database: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(main, "PORTFEL_SCHEDULER_ENABLED", False)
+    add_job = Mock()
+    start = Mock()
+    shutdown = Mock()
+    monkeypatch.setattr(main.scheduler, "add_job", add_job)
+    monkeypatch.setattr(main.scheduler, "start", start)
+    monkeypatch.setattr(main.scheduler, "shutdown", shutdown)
+
+    with TestClient(main.app):
+        pass
+
+    add_job.assert_not_called()
+    start.assert_not_called()
+    shutdown.assert_not_called()

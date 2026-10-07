@@ -5,6 +5,9 @@ data/*.sqlite*
 *.csv
 .env
 .env.*
+!.env.example
+*.db
+frontend_dist/
 backend/.venv/
 frontend/node_modules/
 __pycache__/

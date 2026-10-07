@@ -3,7 +3,9 @@ from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 _configured_database_path = Path(
-    os.environ.get("PORTFEL_DB_PATH", str(ROOT_DIR / "data" / "portfel.db"))
+    os.environ.get("PORTFEL_DATABASE_PATH")
+    or os.environ.get("PORTFEL_DB_PATH")
+    or str(ROOT_DIR / "data" / "portfel.db")
 )
 DATABASE_PATH = (
     _configured_database_path
@@ -11,6 +13,25 @@ DATABASE_PATH = (
     else ROOT_DIR / _configured_database_path
 ).resolve()
 DATABASE_URL = f"sqlite:///{DATABASE_PATH.as_posix()}"
+PORTFEL_CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get(
+        "PORTFEL_CORS_ORIGINS",
+        "http://127.0.0.1:5173,http://localhost:5173",
+    ).split(",")
+    if origin.strip()
+]
+_configured_frontend_dir = Path(
+    os.environ.get(
+        "PORTFEL_FRONTEND_DIR",
+        str(ROOT_DIR / "backend" / "frontend_dist"),
+    )
+)
+PORTFEL_FRONTEND_DIR = (
+    _configured_frontend_dir
+    if _configured_frontend_dir.is_absolute()
+    else ROOT_DIR / _configured_frontend_dir
+).resolve()
 API_HOST = "127.0.0.1"
 API_PORT = 8000
 
@@ -38,5 +59,6 @@ PORTFEL_COOKIE_SECURE = _environment_bool(
     PORTFEL_ENV in {"prod", "production"},
 )
 PORTFEL_AUTH_DISABLED = _environment_bool("PORTFEL_AUTH_DISABLED", False)
+PORTFEL_SCHEDULER_ENABLED = _environment_bool("PORTFEL_SCHEDULER_ENABLED", True)
 if PORTFEL_AUTH_DISABLED and PORTFEL_ENV in {"prod", "production"}:
     raise ValueError("PORTFEL_AUTH_DISABLED cannot be enabled in production.")

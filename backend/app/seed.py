@@ -210,12 +210,25 @@ def seed_instruments(db: Session) -> None:
 
     legacy_neu = existing_rows.get(("NEU", "stock_us_nyse"))
     if legacy_neu and legacy_neu.name.upper() in {"NEWMARKET CORP", "NEUCA"}:
-        legacy_neu.name = "Neuca"
-        legacy_neu.type = "stock_pl"
-        legacy_neu.currency = "PLN"
-        legacy_neu.provider = "stooq"
-        legacy_neu.symbol = "neu"
-        existing_rows[("NEU", "stock_pl")] = legacy_neu
+        neuca = existing_rows.get(("NEUCA", "stock_pl"))
+        if neuca is not None:
+            db.execute(
+                update(Transaction)
+                .where(Transaction.instrument_id == legacy_neu.id)
+                .values(instrument_id=neuca.id)
+            )
+            db.execute(delete(Price).where(Price.instrument_id == legacy_neu.id))
+            db.delete(legacy_neu)
+            canonical_neuca = neuca
+        else:
+            legacy_neu.ticker = "NEUCA"
+            canonical_neuca = legacy_neu
+        canonical_neuca.name = "Neuca"
+        canonical_neuca.type = "stock_pl"
+        canonical_neuca.currency = "PLN"
+        canonical_neuca.provider = "stooq"
+        canonical_neuca.symbol = "neu"
+        existing_rows[("NEUCA", "stock_pl")] = canonical_neuca
         del existing_rows[("NEU", "stock_us_nyse")]
 
     legacy_acp = existing_rows.get(("ACP", "stock_us_nyse"))
