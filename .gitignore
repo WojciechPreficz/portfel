@@ -11,3 +11,4 @@ frontend_dist/
 backend/.venv/
 frontend/node_modules/
 __pycache__/
+release.zip

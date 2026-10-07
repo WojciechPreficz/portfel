@@ -9,11 +9,13 @@ Na Windows uruchom w katalogu głównym repozytorium:
 ```
 
 Skrypt buduje frontend, umieszcza go w `backend/frontend_dist` i tworzy
-`release.zip`. Archiwum zawiera katalog `backend/` bez środowisk wirtualnych,
-testów, plików `.env`, baz danych, `node_modules` i `.git`. Wgraj `release.zip`
-do katalogu domowego na serwerze i rozpakuj. Przykładowo, po rozpakowaniu do
-`~/portfel` plik startowy powinien znajdować się pod
-`~/portfel/backend/passenger_wsgi.py`.
+`release.zip`. Archiwum zawiera katalogi `backend/` i `data/`. Z `backend/`
+pomijane są środowiska wirtualne, testy, pliki `.env`, bazy danych,
+`node_modules` i `.git`; z `data/` dołączane są pliki
+`nasdaq_stocks.json` i `nyse_stocks.json`. Wgraj `release.zip` do katalogu
+domowego na serwerze i rozpakuj, zachowując oba katalogi na tym samym poziomie.
+Przykładowo, po rozpakowaniu do `~/portfel` pliki powinny znajdować się pod
+`~/portfel/backend/passenger_wsgi.py` oraz `~/portfel/data/`.
 
 ## 2. Utworzenie aplikacji Python
 

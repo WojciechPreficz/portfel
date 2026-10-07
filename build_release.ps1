@@ -4,18 +4,29 @@ $repoRoot = $PSScriptRoot
 $frontendPath = Join-Path $repoRoot "frontend"
 $frontendDistPath = Join-Path $frontendPath "dist"
 $backendPath = Join-Path $repoRoot "backend"
+$dataPath = Join-Path $repoRoot "data"
 $backendFrontendDistPath = Join-Path $backendPath "frontend_dist"
 $releasePath = Join-Path $repoRoot "release.zip"
 $stagingRoot = Join-Path ([System.IO.Path]::GetTempPath()) (
     "portfel-release-" + [guid]::NewGuid().ToString("N")
 )
 $stagingBackendPath = Join-Path $stagingRoot "backend"
+$stagingDataPath = Join-Path $stagingRoot "data"
+$dataFileNames = @(
+    "nasdaq_stocks.json",
+    "nyse_stocks.json"
+)
 
 if (-not (Test-Path -LiteralPath (Join-Path $frontendPath "package.json"))) {
     throw "Nie znaleziono frontend/package.json."
 }
 if (-not (Test-Path -LiteralPath (Join-Path $backendPath "requirements.txt"))) {
     throw "Nie znaleziono backend/requirements.txt."
+}
+foreach ($fileName in $dataFileNames) {
+    if (-not (Test-Path -LiteralPath (Join-Path $dataPath $fileName) -PathType Leaf)) {
+        throw "Nie znaleziono wymaganego pliku data/$fileName."
+    }
 }
 
 Push-Location $frontendPath
@@ -94,6 +105,12 @@ foreach ($file in $includedFiles) {
     Copy-Item -LiteralPath $file.Source -Destination $destination -Force
 }
 
+New-Item -ItemType Directory -Path $stagingDataPath -Force | Out-Null
+foreach ($fileName in $dataFileNames) {
+    Copy-Item -LiteralPath (Join-Path $dataPath $fileName) `
+        -Destination (Join-Path $stagingDataPath $fileName) -Force
+}
+
 try {
     Add-Type -AssemblyName System.IO.Compression
     Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -113,6 +130,14 @@ try {
                 [System.IO.Compression.CompressionLevel]::Optimal
             ) | Out-Null
         }
+        foreach ($fileName in $dataFileNames) {
+            [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+                $archive,
+                (Join-Path $stagingDataPath $fileName),
+                "data/$fileName",
+                [System.IO.Compression.CompressionLevel]::Optimal
+            ) | Out-Null
+        }
     }
     finally {
         $archive.Dispose()
@@ -129,10 +154,12 @@ $archiveSize = (Get-Item -LiteralPath $releasePath).Length
 $archiveEntries = $includedFiles |
     Sort-Object RelativePath |
     ForEach-Object { "backend/$($_.RelativePath -replace '\\', '/')" }
+$archiveEntries += $dataFileNames | ForEach-Object { "data/$_" }
 
 Write-Host ""
 Write-Host "Created: $releasePath"
 Write-Host ("Size: {0:N2} MB" -f ($archiveSize / 1MB))
 Write-Host ("Backend file count: {0}" -f $includedFiles.Count)
+Write-Host ("Data file count: {0}" -f $dataFileNames.Count)
 Write-Host "Archive contents:"
 $archiveEntries | ForEach-Object { Write-Host "  $_" }
