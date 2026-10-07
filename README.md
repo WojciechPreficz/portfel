@@ -7,7 +7,7 @@ Prywatna aplikacja do śledzenia inwestycji i ich wartości. Pozwala prowadzić 
 - Pokazuje podsumowanie portfela, wykres zmian wartości, alokację i listę pozycji.
 - Obsługuje m.in. akcje polskie i amerykańskie, ETF-y oraz złoto.
 - Umożliwia ręczne dodawanie transakcji, import zakupów z plików xStation5 (`.xlsx`) i Bossa (`.csv`), a także usuwanie pozycji.
-- Pobiera i odświeża notowania oraz kursy walut; automatyczne odświeżanie jest zaplanowane na godz. 17:10 i 22:10 czasu warszawskiego.
+- Pobiera notowania i kursy walut na żądanie, po imporcie transakcji oraz przy zapisie zakupu złota; nie uruchamia cyklicznego automatycznego odświeżania.
 - Przechowuje dane lokalnie w bazie SQLite `data/portfel.db`.
 
 ## Uruchomienie lokalne
@@ -67,8 +67,6 @@ Zalecane są Python 3.13 oraz Node.js. Obecne przypięte zależności backendu n
      dostępne pod tą samą domeną.
    - `PORTFEL_FRONTEND_DIR` — katalog z zbudowanym frontendem; domyślnie
      `backend/frontend_dist` względem katalogu głównego repozytorium.
-   - `PORTFEL_SCHEDULER_ENABLED` — włącza zaplanowane odświeżanie notowań;
-     domyślnie `true`.
 
    Po aktywowaniu środowiska wirtualnego backendu hash hasła i klucz wygenerujesz
    z katalogu głównego repozytorium:

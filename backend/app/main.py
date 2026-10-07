@@ -1,10 +1,6 @@
 from contextlib import asynccontextmanager
-import logging
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -19,16 +15,11 @@ from app.config import (
     PORTFEL_AUTH_DISABLED,
     PORTFEL_CORS_ORIGINS,
     PORTFEL_FRONTEND_DIR,
-    PORTFEL_SCHEDULER_ENABLED,
 )
 from app.database import SessionLocal, engine
 from app.models import Base, Portfolio
 from app.routers import fx, instruments, portfolio, quotes, transactions
 from app.seed import seed_instruments
-from app.services.quotes import refresh_quotes
-
-scheduler = BackgroundScheduler(timezone=ZoneInfo("Europe/Warsaw"))
-logger = logging.getLogger(__name__)
 
 
 class FrontendRoute(APIRoute):
@@ -107,19 +98,6 @@ def _ensure_portfolio_schema(db):
     db.commit()
 
 
-def _scheduled_refresh():
-    db = SessionLocal()
-    try:
-        result = refresh_quotes(db)
-        if result["errors"]:
-            logger.error("Scheduled quote refresh completed with errors: %s", result["errors"])
-    except Exception:
-        db.rollback()
-        logger.exception("Scheduled quote refresh failed")
-    finally:
-        db.close()
-
-
 def initialize() -> None:
     validate_auth_configuration()
     DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -146,23 +124,7 @@ def initialize() -> None:
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     initialize()
-    if PORTFEL_SCHEDULER_ENABLED:
-        scheduler.add_job(
-            _scheduled_refresh,
-            CronTrigger(hour=17, minute=10, timezone="Europe/Warsaw"),
-            id="refresh_gpw",
-            replace_existing=True,
-        )
-        scheduler.add_job(
-            _scheduled_refresh,
-            CronTrigger(hour=22, minute=10, timezone="Europe/Warsaw"),
-            id="refresh_us",
-            replace_existing=True,
-        )
-        scheduler.start()
     yield
-    if PORTFEL_SCHEDULER_ENABLED:
-        scheduler.shutdown(wait=False)
 
 
 app = FastAPI(

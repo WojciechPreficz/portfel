@@ -1,7 +1,6 @@
 import re
 from collections.abc import Iterator
 from pathlib import Path
-from unittest.mock import Mock
 
 import bcrypt
 import pytest
@@ -53,9 +52,6 @@ def test_database(
     monkeypatch.setattr(main, "engine", engine)
     monkeypatch.setattr(main, "SessionLocal", test_session_local)
     monkeypatch.setattr(database, "SessionLocal", test_session_local)
-    monkeypatch.setattr(main.scheduler, "add_job", lambda *args, **kwargs: None)
-    monkeypatch.setattr(main.scheduler, "start", lambda: None)
-    monkeypatch.setattr(main.scheduler, "shutdown", lambda wait=False: None)
     yield database_path
     engine.dispose()
 
@@ -186,24 +182,3 @@ def test_initialize_is_idempotent(
 
     assert first_count is not None and first_count > 0
     assert second_count == first_count
-
-
-def test_scheduler_does_not_start_when_disabled(
-    auth_settings: str,
-    test_database: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(main, "PORTFEL_SCHEDULER_ENABLED", False)
-    add_job = Mock()
-    start = Mock()
-    shutdown = Mock()
-    monkeypatch.setattr(main.scheduler, "add_job", add_job)
-    monkeypatch.setattr(main.scheduler, "start", start)
-    monkeypatch.setattr(main.scheduler, "shutdown", shutdown)
-
-    with TestClient(main.app):
-        pass
-
-    add_job.assert_not_called()
-    start.assert_not_called()
-    shutdown.assert_not_called()

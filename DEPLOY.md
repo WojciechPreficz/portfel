@@ -61,8 +61,6 @@ repozytorium. Ustaw co najmniej:
   samą domeną; w przeciwnym razie podaj dozwolone origins rozdzielone przecinkami.
 - `PORTFEL_FRONTEND_DIR` — opcjonalnie; domyślnie aplikacja szuka frontendu w
   `backend/frontend_dist`.
-- `PORTFEL_SCHEDULER_ENABLED=true` — ustaw `false`, jeśli hosting nie pozwala na
-  zadania działające w tle.
 
 Wartość `PORTFEL_DATABASE_PATH` ustaw na pełną ścieżkę do pliku SQLite w
 katalogu zapisywalnym przez użytkownika aplikacji, np.

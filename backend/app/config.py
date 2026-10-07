@@ -59,6 +59,5 @@ PORTFEL_COOKIE_SECURE = _environment_bool(
     PORTFEL_ENV in {"prod", "production"},
 )
 PORTFEL_AUTH_DISABLED = _environment_bool("PORTFEL_AUTH_DISABLED", False)
-PORTFEL_SCHEDULER_ENABLED = _environment_bool("PORTFEL_SCHEDULER_ENABLED", True)
 if PORTFEL_AUTH_DISABLED and PORTFEL_ENV in {"prod", "production"}:
     raise ValueError("PORTFEL_AUTH_DISABLED cannot be enabled in production.")
