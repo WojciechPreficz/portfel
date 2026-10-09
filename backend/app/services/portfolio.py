@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.models import (
     AssetCashFlow,
     CashDeposit,
+    CashMovement,
     FxRate,
     Instrument,
     Price,
@@ -24,7 +25,9 @@ def xirr(cash_flows: list[tuple[date, Decimal]]) -> Decimal | None:
     if not any(amount < 0 for _, amount in cash_flows) or not any(amount > 0 for _, amount in cash_flows):
         return None
 
-    start = cash_flows[0][0]
+    start = min(on_date for on_date, _amount in cash_flows)
+    if all(on_date == start for on_date, _amount in cash_flows):
+        return None
 
     def npv(rate: float) -> float:
         return sum(float(amount) / (1 + rate) ** ((on_date - start).days / 365) for on_date, amount in cash_flows)
@@ -110,23 +113,10 @@ def holdings_as_of(transactions: list[Transaction], on_date: date) -> dict[int, 
 
 
 def position_metrics(txs: list[Transaction], db: Session, on_date: date, fx_cache=None):
-    qty = ZERO
-    buy_qty = ZERO
-    buy_cost_pln = ZERO
-    has_missing_fx = False
-    for tx in txs:
-        signed = _signed_qty(tx)
-        qty += signed
-        if tx.type == "BUY":
-            fx = fx_on(db, tx.currency, tx.date, fx_cache)
-            if fx is None:
-                has_missing_fx = True
-                continue
-            buy_qty += _as_decimal(tx.quantity)
-            if tx.purchase_price_pln is not None:
-                buy_cost_pln += _as_decimal(tx.purchase_price_pln) + _as_decimal(tx.commission) * fx
-            else:
-                buy_cost_pln += (_as_decimal(tx.quantity) * _as_decimal(tx.price) + _as_decimal(tx.commission)) * fx
+    # Each portfolio owns its cost pool. Sales remove cost at the moving average;
+    # a fully closed pool must not affect a later purchase or another portfolio.
+    pools = {}
+    txs = [tx for tx in txs if tx.date <= on_date]
     if txs:
         capex_query = select(AssetCashFlow).where(
             AssetCashFlow.instrument_id == txs[0].instrument_id,
@@ -137,18 +127,40 @@ def position_metrics(txs: list[Transaction], db: Session, on_date: date, fx_cach
         capex_rows = db.scalars(capex_query).all()
     else:
         capex_rows = []
-    capex_pln = ZERO
-    for cash_flow in capex_rows:
-        fx = fx_on(db, cash_flow.currency, cash_flow.date, fx_cache)
-        if fx is None:
-            has_missing_fx = True
+    events = [(tx.date, 0, tx.id or 0, tx) for tx in txs]
+    events.extend((flow.date, 1, flow.id or 0, flow) for flow in capex_rows)
+    for _day, kind, _id, row in sorted(events, key=lambda event: event[:3]):
+        pool = pools.setdefault(row.portfolio_id, {"qty": ZERO, "cost": ZERO, "missing": False})
+        if kind == 1:
+            if pool["qty"] > 0:
+                amount = _cash_flow_amount_pln(db, row, fx_cache)
+                if amount is None:
+                    pool["missing"] = True
+                else:
+                    pool["cost"] += amount
+        elif row.type == "BUY":
+            pool["qty"] += _as_decimal(row.quantity)
+            amount = _transaction_cash_flow(db, row, fx_cache)
+            if amount is None:
+                pool["missing"] = True
+            else:
+                pool["cost"] -= amount
         else:
-            capex_pln += _as_decimal(cash_flow.amount) * fx
-    if has_missing_fx:
-        avg_cost = cost_pln = None
-    else:
-        avg_cost = ((buy_cost_pln + capex_pln) / buy_qty) if buy_qty else ZERO
-        cost_pln = avg_cost * qty if qty else ZERO
+            sold = _as_decimal(row.quantity)
+            if pool["qty"] > 0:
+                pool["cost"] *= (pool["qty"] - sold) / pool["qty"]
+            pool["qty"] -= sold
+            if pool["qty"] == 0:
+                pool["cost"] = ZERO
+                pool["missing"] = False
+            elif pool["qty"] < 0:
+                pool["missing"] = True
+    qty = sum((pool["qty"] for pool in pools.values()), ZERO)
+    cost_pln = (
+        None if any(pool["missing"] for pool in pools.values())
+        else sum((pool["cost"] for pool in pools.values()), ZERO)
+    )
+    avg_cost = None if cost_pln is None else (cost_pln / qty if qty else ZERO)
     return qty, avg_cost, cost_pln
 
 
@@ -166,7 +178,9 @@ def _signed_asset_cash_flow(cash_flow: AssetCashFlow, amount_pln: Decimal) -> De
 
 
 def _transaction_cash_flow(db: Session, tx: Transaction, fx_cache=None) -> Decimal | None:
-    fx = fx_on(db, tx.currency, tx.date, fx_cache)
+    # An imported PLN account amount already includes the actual conversion.
+    needs_fx = tx.purchase_price_pln is None or _as_decimal(tx.commission) != ZERO
+    fx = fx_on(db, tx.currency, tx.date, fx_cache) if needs_fx else Decimal("1")
     if fx is None:
         return None
     gross = (
@@ -176,6 +190,41 @@ def _transaction_cash_flow(db: Session, tx: Transaction, fx_cache=None) -> Decim
     )
     commission = _as_decimal(tx.commission) * fx
     return -(gross + commission) if tx.type == "BUY" else gross - commission
+
+
+def cash_value_on(db: Session, transactions, deposits, movements, on_date: date, fx_cache=None) -> Decimal | None:
+    """Keep native-currency cash balances and value them at the terminal date."""
+    funded_ids = {row.portfolio_id for row in deposits if row.date <= on_date}
+    balances = {}
+
+    def add(currency, amount):
+        currency = currency.upper()
+        balances[currency] = balances.get(currency, ZERO) + amount
+
+    for deposit in deposits:
+        if deposit.date <= on_date:
+            add(deposit.currency, _as_decimal(deposit.amount))
+    for tx in transactions:
+        if tx.date > on_date or tx.portfolio_id not in funded_ids:
+            continue
+        sign = Decimal("-1") if tx.type == "BUY" else Decimal("1")
+        if tx.purchase_price_pln is not None:
+            add("PLN", sign * _as_decimal(tx.purchase_price_pln))
+            add(tx.currency, -_as_decimal(tx.commission))
+        else:
+            add(tx.currency, sign * _as_decimal(tx.quantity) * _as_decimal(tx.price) - _as_decimal(tx.commission))
+    for movement in movements:
+        if movement.date <= on_date and movement.portfolio_id in funded_ids:
+            add(movement.currency, _as_decimal(movement.amount))
+    total = ZERO
+    for currency, balance in balances.items():
+        if not balance:
+            continue
+        fx = fx_on(db, currency, on_date, fx_cache)
+        if fx is None:
+            return None
+        total += balance * fx
+    return total
 
 
 def portfolio_value_on(
@@ -202,24 +251,29 @@ def portfolio_value_on(
 
 
 def build_summary(db: Session, portfolio_id: int | None = None) -> dict:
-    transaction_query = select(Transaction).options(selectinload(Transaction.instrument))
-    deposit_query = select(CashDeposit)
+    today = date.today()
+    transaction_query = (
+        select(Transaction).where(Transaction.date <= today)
+        .options(selectinload(Transaction.instrument))
+    )
+    deposit_query = select(CashDeposit).where(CashDeposit.date <= today)
+    movement_query = select(CashMovement).where(CashMovement.date <= today)
     asset_cash_flow_query = (
         select(AssetCashFlow)
-        .where(AssetCashFlow.date <= date.today())
+        .where(AssetCashFlow.date <= today)
         .order_by(AssetCashFlow.date, AssetCashFlow.id)
     )
     if portfolio_id is not None:
         transaction_query = transaction_query.where(Transaction.portfolio_id == portfolio_id)
         deposit_query = deposit_query.where(CashDeposit.portfolio_id == portfolio_id)
+        movement_query = movement_query.where(CashMovement.portfolio_id == portfolio_id)
         asset_cash_flow_query = asset_cash_flow_query.where(AssetCashFlow.portfolio_id == portfolio_id)
     transactions = list(
         db.scalars(
-            transaction_query.order_by(Transaction.date)
+            transaction_query.order_by(Transaction.date, Transaction.id)
         ).all()
     )
     instruments = {i.id: i for i in db.scalars(select(Instrument)).all()}
-    today = date.today()
     fx_cache: dict = {}
     price_cache: dict = {}
     grouped = holdings_as_of(transactions, today)
@@ -390,7 +444,7 @@ def build_summary(db: Session, portfolio_id: int | None = None) -> dict:
                     position_xirr_flows.append((cash_flow.date, _signed_asset_cash_flow(cash_flow, amount_pln)))
             market = position["market_value_pln"]
             if market is not None:
-                position_xirr_flows.append((position["valuation_date"] or today, market))
+                position_xirr_flows.append((today, market))
             result = (
                 xirr(sorted(position_xirr_flows, key=lambda item: item[0]))
                 if not missing_position_xirr_fx and market is not None
@@ -401,6 +455,8 @@ def build_summary(db: Session, portfolio_id: int | None = None) -> dict:
             position["xirr_pct"] = None
 
     cash_flows = []
+    movements = list(db.scalars(movement_query).all())
+    cash_value = cash_value_on(db, transactions, deposits, movements, today, fx_cache)
     deposit_portfolio_ids = {deposit.portfolio_id for deposit in deposits}
     for deposit in deposits:
         fx = fx_on(db, deposit.currency, deposit.date, fx_cache)
@@ -411,32 +467,37 @@ def build_summary(db: Session, portfolio_id: int | None = None) -> dict:
     for tx in transactions:
         if tx.portfolio_id in deposit_portfolio_ids:
             continue
-        fx = fx_on(db, tx.currency, tx.date, fx_cache)
-        if fx is None:
+        amount = _transaction_cash_flow(db, tx, fx_cache)
+        if amount is None:
             has_missing_cash_flow_fx = True
             continue
-        gross = (
-            _as_decimal(tx.purchase_price_pln)
-            if tx.purchase_price_pln is not None
-            else _as_decimal(tx.quantity) * _as_decimal(tx.price) * fx
-        )
-        commission = _as_decimal(tx.commission) * fx
-        cash_flows.append((tx.date, -(gross + commission) if tx.type == "BUY" else gross - commission))
+        cash_flows.append((tx.date, amount))
+    for movement in movements:
+        if movement.portfolio_id in deposit_portfolio_ids:
+            continue
+        fx = fx_on(db, movement.currency, movement.date, fx_cache)
+        if fx is None:
+            has_missing_cash_flow_fx = True
+        else:
+            cash_flows.append((movement.date, _as_decimal(movement.amount) * fx))
     for cash_flow in asset_cash_flows:
         amount_pln = _cash_flow_amount_pln(db, cash_flow, fx_cache)
         if amount_pln is None:
             has_missing_cash_flow_fx = True
         else:
             cash_flows.append((cash_flow.date, _signed_asset_cash_flow(cash_flow, amount_pln)))
-    if value:
-        cash_flows.append((as_of or today, value))
+    terminal_value = value + cash_value if value is not None and cash_value is not None else None
+    if terminal_value is not None:
+        cash_flows.append((today, terminal_value))
     annual_return = (
         xirr(cash_flows)
-        if not has_missing_prices and not has_missing_cash_flow_fx
+        if not has_missing_prices and not has_missing_cash_flow_fx and terminal_value is not None
         else None
     )
     return {
         "value_pln": value,
+        "cash_pln": cash_value,
+        "total_value_pln": terminal_value,
         "value_prev_pln": value_prev,
         "change_1d_pln": change_1d,
         "change_1d_pct": (change_1d / value_prev * HUNDRED) if change_1d is not None and value_prev else None,

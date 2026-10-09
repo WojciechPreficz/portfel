@@ -5,12 +5,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
-from app.models import CashDeposit, Instrument, Portfolio, Transaction
+from app.models import CashDeposit, CashMovement, Instrument, Portfolio, Transaction
 from app.schemas import TransactionCreate, TransactionImportResult, TransactionOut
 from app.seed import apply_instrument_defaults
 from app.services.portfolio import _signed_qty
 from app.services.symbol_resolver import ResolutionError, resolve
-from app.services.transaction_import import read_bossa_purchases, read_deposits, read_purchases
+from app.services.transaction_import import read_bossa_purchases, read_cash_movements, read_deposits, read_purchases
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 
@@ -113,6 +113,8 @@ def import_transactions(
         purchases, errors = read_purchases(content) if source == "xstation5" else read_bossa_purchases(content)
         deposits, deposit_errors = read_deposits(content) if source == "xstation5" else ([], [])
         errors.extend(deposit_errors)
+        movements, movement_errors = read_cash_movements(content) if source == "xstation5" else ([], [])
+        errors.extend(movement_errors)
     except (ValueError, KeyError) as exc:
         raise HTTPException(400, str(exc)) from exc
     if errors:
@@ -120,7 +122,7 @@ def import_transactions(
 
     transactions = []
     imported_instrument_ids = set()
-    for purchase in purchases:
+    for purchase in sorted(purchases, key=lambda row: row.get("timestamp", row["date"].isoformat())):
         resolution = resolve(
             db,
             raw_ticker=purchase.get("raw_ticker"),
@@ -156,10 +158,12 @@ def import_transactions(
             currency=purchase["currency"] or instrument.currency,
             date=purchase["date"],
             commission=purchase["commission"],
+            purchase_price_pln=purchase.get("purchase_price_pln"),
         ))
     if errors:
         return TransactionImportResult(imported=0, skipped=len(errors), errors=errors)
     db.add_all(transactions)
+    db.add_all(CashMovement(portfolio_id=portfolio_id, **movement) for movement in movements)
     db.add_all(
         CashDeposit(
             portfolio_id=portfolio_id,

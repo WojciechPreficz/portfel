@@ -180,7 +180,7 @@ class RealEstateTest(unittest.TestCase):
                     )
                 legacy_engine.dispose()
 
-                command.upgrade(config, "head")
+                command.upgrade(config, "004_real_estate")
                 upgraded_engine = create_engine(database_url)
                 self.assertIn("property_details", inspect(upgraded_engine).get_table_names())
                 self.assertIn("asset_cash_flows", inspect(upgraded_engine).get_table_names())
@@ -332,7 +332,10 @@ class RealEstateTest(unittest.TestCase):
         self.db.commit()
         expected_flows.append((end_date, Decimal("520000")))
 
-        actual = build_summary(self.db, self.portfolio.id)["xirr_pct"]
+        # Historical assertions need a fixed reporting date, not today's date.
+        with patch("app.services.portfolio.date") as reporting_date:
+            reporting_date.today.return_value = end_date
+            actual = build_summary(self.db, self.portfolio.id)["xirr_pct"]
         expected = Decimal(str(self._expected_xirr(expected_flows))) * Decimal("100")
 
         self.assertLess(abs(actual - expected), Decimal("0.01"))

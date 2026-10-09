@@ -6,9 +6,40 @@ Prywatna aplikacja do śledzenia inwestycji i ich wartości. Pozwala prowadzić 
 
 - Pokazuje podsumowanie portfela, wykres zmian wartości, alokację i listę pozycji.
 - Obsługuje m.in. akcje polskie i amerykańskie, ETF-y oraz złoto.
-- Umożliwia ręczne dodawanie transakcji, import zakupów z plików xStation5 (`.xlsx`) i Bossa (`.csv`), a także usuwanie pozycji.
+- Umożliwia ręczne dodawanie transakcji, import zakupów i sprzedaży z plików xStation5 (`.xlsx`) i Bossa (`.csv`), a także usuwanie pozycji.
 - Pobiera notowania i kursy walut na żądanie, po imporcie transakcji oraz przy zapisie zakupu złota; nie uruchamia cyklicznego automatycznego odświeżania.
 - Przechowuje dane lokalnie w bazie SQLite `data/portfel.db`.
+
+## Obliczenia i import xStation
+
+Koszt otwartej pozycji jest rozliczany średnią ruchomą osobno w każdym portfelu.
+Sprzedaż zmniejsza koszt pozostałych jednostek; po całkowitym zamknięciu pozycji
+nowy zakup rozpoczyna nową pulę kosztu. Dla eksportu rachunku PLN z xStation
+importer zapisuje rzeczywiste kwoty zakupów i sprzedaży z `Cash Operations.Amount`,
+uwzględniające przewalutowanie brokera, zamiast przybliżać je kursem NBP.
+
+Importer odczytuje również wpłaty, wypłaty, dywidendy, podatki i odsetki od gotówki.
+Operacje przychodów i kosztów rachunku są przechowywane w tabeli `cash_movements`
+(migracja `005_cash_movements`). Wypłaty są ujemnymi wpisami `cash_deposits`.
+
+XIRR jest rocznym zwrotem ważonym kapitałem. W portfelach ze wpłatami przepływami
+zewnętrznymi są wpłaty i wypłaty, a wartość końcowa obejmuje aktywa oraz saldo
+gotówki, również ujemne. Dywidendy i podatki wpływają na gotówkę i nie są liczone
+ponownie jako przepływy zewnętrzne. W portfelach bez wpłat pozostaje metoda
+przepływów zakupu i sprzedaży. Przepływy nieruchomości pozostają zewnętrzne zgodnie
+z założeniami fazy 1 w `docs/real_estates.md`.
+
+Wartość końcowa XIRR jest datowana na dzień obliczenia, z ostatnimi dostępnymi
+cenami oraz kursem walutowym z tego dnia; przyszłe operacje są pomijane.
+API zachowuje `value_pln` jako wartość aktywów oraz dodaje `cash_pln` i
+`total_value_pln` jako saldo gotówki i sumę aktywów z gotówką. Dla przepływów
+wyłącznie z jednego dnia XIRR jest nieokreślony.
+
+Wcześniejszy import nie zawiera pominiętych sprzedaży ani operacji przychodów
+i podatków. Sama migracja tych danych nie odtworzy: stary import należy zastąpić
+pełną historią z poprawionego importera. Ponowne dodanie pliku do istniejącej
+historii utworzy duplikaty. Skrypt `scripts/verify_xstation_export.py` pozwala
+sprawdzić zgodność pliku z importerem na bazie w pamięci, bez zmiany danych aplikacji.
 
 ## Uruchomienie lokalne
 

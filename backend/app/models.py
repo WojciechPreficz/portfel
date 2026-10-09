@@ -84,6 +84,19 @@ class CashDeposit(Base):
     portfolio: Mapped[Portfolio] = relationship(back_populates="deposits")
 
 
+class CashMovement(Base):
+    """Signed broker cash income/expenses; trades and funding live in their own tables."""
+
+    __tablename__ = "cash_movements"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    portfolio_id: Mapped[int] = mapped_column(ForeignKey("portfolios.id"), index=True)
+    date: Mapped[date_type] = mapped_column(Date, index=True)
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 8))
+    currency: Mapped[str] = mapped_column(String(3))
+    kind: Mapped[str] = mapped_column(String(64))
+
+
 class Price(Base):
     __tablename__ = "prices"
     __table_args__ = (UniqueConstraint("instrument_id", "date", name="uq_price_instrument_date"),)

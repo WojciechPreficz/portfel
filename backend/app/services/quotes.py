@@ -5,7 +5,7 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import CashDeposit, FxRate, Instrument, Price, Transaction
+from app.models import CashDeposit, CashMovement, FxRate, Instrument, Price, Transaction
 from app.services.adapters import get_adapter
 from app.services.adapters.base import QuotePoint
 from app.services.adapters.nbp import fetch_fx_history
@@ -122,9 +122,12 @@ def _fx_start(db: Session, pair: str, currency: str, fallback: date) -> date:
         select(func.min(CashDeposit.date))
         .where(CashDeposit.currency == currency)
     )
+    movement_date = db.scalar(
+        select(func.min(CashMovement.date)).where(CashMovement.currency == currency)
+    )
     dates = [
         value
-        for value in (transaction_date, instrument_transaction_date, deposit_date)
+        for value in (transaction_date, instrument_transaction_date, deposit_date, movement_date)
         if value is not None
     ]
     return min(dates) if dates else fallback
@@ -260,6 +263,10 @@ def refresh_quotes(
     currencies.update(
         currency.upper()
         for currency in db.scalars(select(CashDeposit.currency).distinct()).all()
+    )
+    currencies.update(
+        currency.upper()
+        for currency in db.scalars(select(CashMovement.currency).distinct()).all()
     )
     for currency in sorted(currencies - {"PLN"}):
         pair = f"{currency}PLN"

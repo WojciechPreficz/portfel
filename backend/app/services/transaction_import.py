@@ -77,8 +77,24 @@ def _apply_stock_splits(purchase: dict) -> dict:
     return purchase
 
 
+def _account_currency(workbook) -> str:
+    """The account summary currency also applies to Cash Operations.Amount."""
+    for sheet in workbook.worksheets:
+        sheet.reset_dimensions()
+        currency_index = None
+        for row in sheet.iter_rows(values_only=True):
+            if "Currency" in row and "Metric" in row:
+                currency_index = row.index("Currency")
+            elif currency_index is not None and len(row) > currency_index:
+                value = row[currency_index]
+                if isinstance(value, str) and len(value.strip()) == 3:
+                    return value.strip().upper()
+    return "PLN"
+
+
 def read_purchases(content: bytes) -> tuple[list[dict], list[str]]:
     workbook = load_workbook(BytesIO(content), read_only=True, data_only=True)
+    account_currency = _account_currency(workbook)
     header_candidates = []
     xstation_sheet = False
     for sheet_index, sheet in enumerate(workbook.worksheets):
@@ -130,11 +146,13 @@ def read_purchases(content: bytes) -> tuple[list[dict], list[str]]:
         if not any(value not in (None, "") for value in row):
             continue
         operation = _normalise(row[headers["type"]]) if "type" in headers else "buy"
-        if operation and not any(word in operation for word in ("buy", "kup", "zakup", "purchase", "naby")):
+        is_sell = operation in {"sell", "stock sell", "sprzedaz", "sale"}
+        if operation and not is_sell and not any(word in operation for word in ("buy", "kup", "zakup", "purchase", "naby")):
             continue
         try:
             if xstation_cash:
-                match = re.search(r"\bbuy\s+(\d+(?:/\d+)?)\s*@\s*([\d.,]+)", str(row[headers["comment"]]), re.IGNORECASE)
+                # XStation writes sales as CLOSE BUY 5/7 @ 8.72: Type defines the side.
+                match = re.search(r"\b(?:buy|sell)\s+(\d+(?:\.\d+)?(?:/\d+(?:\.\d+)?)?)\s*@\s*([\d.,]+)", str(row[headers["comment"]]), re.IGNORECASE)
                 if not match:
                     raise ValueError(f"wiersz {row_number}: nie rozpoznano ilosci i ceny w komentarzu")
                 quantity_text = match.group(1)
@@ -157,6 +175,7 @@ def read_purchases(content: bytes) -> tuple[list[dict], list[str]]:
             purchases.append(_apply_stock_splits({
                 "row_number": row_number,
                 "date": _date(row[headers["date"]], row_number),
+                "timestamp": row[headers["date"]].isoformat() if isinstance(row[headers["date"]], (date, datetime)) else _date(row[headers["date"]], row_number).isoformat(),
                 "ticker": _normalise_ticker(row[headers["ticker"]]) if "ticker" in headers else None,
                 "raw_ticker": str(row[headers["ticker"]]).strip().upper() if "ticker" in headers and row[headers["ticker"]] else None,
                 "name": str(row[headers["instrument_name"]]).strip() if "instrument_name" in headers and row[headers["instrument_name"]] else None,
@@ -166,6 +185,10 @@ def read_purchases(content: bytes) -> tuple[list[dict], list[str]]:
                 "price": price,
                 "currency": str(row[headers["currency"]]).strip().upper() if "currency" in headers and row[headers["currency"]] else None,
                 "commission": _decimal(row[headers["commission"]], "commission", row_number) if "commission" in headers and row[headers["commission"]] not in (None, "") else Decimal("0"),
+                "type": "SELL" if is_sell else "BUY",
+                # Account amounts include the broker's actual currency conversion.
+                "purchase_price_pln": abs(_decimal(row[headers["value"]], "value", row_number))
+                if xstation_cash and account_currency == "PLN" and "value" in headers else None,
             }))
         except ValueError as exc:
             errors.append(str(exc))
@@ -227,6 +250,7 @@ def read_bossa_purchases(content: bytes) -> tuple[list[dict], list[str]]:
 
 def read_deposits(content: bytes) -> tuple[list[dict], list[str]]:
     workbook = load_workbook(BytesIO(content), read_only=True, data_only=True)
+    account_currency = _account_currency(workbook)
     sheet = next((sheet for sheet in workbook.worksheets if _normalise(sheet.title) == "cash operations"), None)
     if sheet is None:
         return [], []
@@ -254,12 +278,14 @@ def read_deposits(content: bytes) -> tuple[list[dict], list[str]]:
     errors = []
     for row_number, row in enumerate(rows[header_index + 1:], start=header_index + 2):
         operation = _normalise(row[headers["type"]]) if len(row) > headers["type"] else ""
-        if operation not in {"deposit", "wplata", "cash deposit"}:
+        if operation not in {"deposit", "wplata", "cash deposit", "withdrawal", "withdraw", "wyplata", "cash withdrawal"}:
             continue
         try:
             amount = abs(_decimal(row[headers["value"]], "amount", row_number))
             if amount <= 0:
                 raise ValueError(f"wiersz {row_number}: amount musi byc > 0")
+            if operation in {"withdrawal", "withdraw", "wyplata", "cash withdrawal"}:
+                amount = -amount
             deposits.append(
                 {
                     "date": _date(row[headers["date"]], row_number),
@@ -267,10 +293,48 @@ def read_deposits(content: bytes) -> tuple[list[dict], list[str]]:
                     "currency": (
                         str(row[headers["currency"]]).strip().upper()
                         if "currency" in headers and row[headers["currency"]]
-                        else "PLN"
+                        else account_currency
                     ),
                 }
             )
         except ValueError as exc:
             errors.append(str(exc))
     return deposits, errors
+
+
+def read_cash_movements(content: bytes) -> tuple[list[dict], list[str]]:
+    """Read retained income, taxes and fees separately from funding and trades."""
+    workbook = load_workbook(BytesIO(content), read_only=True, data_only=True)
+    account_currency = _account_currency(workbook)
+    sheet = next((s for s in workbook if _normalise(s.title) == "cash operations"), None)
+    if sheet is None:
+        return [], []
+    sheet.reset_dimensions()
+    headers = None
+    movements, errors = [], []
+    handled_elsewhere = {
+        "buy", "stock purchase", "purchase", "sell", "stock sell", "sale",
+        "deposit", "wplata", "cash deposit", "withdrawal", "withdraw", "wyplata", "cash withdrawal",
+    }
+    for row_number, row in enumerate(sheet.iter_rows(values_only=True), start=1):
+        if headers is None:
+            if {"Type", "Time", "Amount"}.issubset(row):
+                headers = {key: row.index(key) for key in ("Type", "Time", "Amount")}
+                if "Currency" in row:
+                    headers["Currency"] = row.index("Currency")
+            continue
+        if len(row) <= max(headers.values()) or not any(v not in (None, "") for v in row):
+            continue
+        operation = _normalise(row[headers["Type"]])
+        if operation in handled_elsewhere or operation in {"total", ""}:
+            continue
+        try:
+            movements.append({
+                "date": _date(row[headers["Time"]], row_number),
+                "amount": _decimal(row[headers["Amount"]], "amount", row_number),
+                "currency": str(row[headers["Currency"]]).upper() if "Currency" in headers and row[headers["Currency"]] else account_currency,
+                "kind": operation,
+            })
+        except ValueError as exc:
+            errors.append(str(exc))
+    return movements, errors

@@ -3,7 +3,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import AssetCashFlow, CashDeposit, Instrument, Portfolio, Price, PropertyDetails, Transaction
+from app.models import AssetCashFlow, CashDeposit, CashMovement, Instrument, Portfolio, Price, PropertyDetails, Transaction
 from app.schemas import HistoryPoint, PortfolioCreate, PortfolioOut, PortfolioSummary
 from app.services.portfolio import build_history, build_summary
 
@@ -69,6 +69,7 @@ def delete_holdings(portfolio_id: int, db: Session = Depends(get_db)):
 
 
 def _delete_portfolio_data(db: Session, portfolio_id: int):
+    db.query(CashMovement).filter(CashMovement.portfolio_id == portfolio_id).delete()
     deleted_deposits = db.query(CashDeposit).filter(CashDeposit.portfolio_id == portfolio_id).delete()
     deleted_asset_cash_flows = db.query(AssetCashFlow).filter(
         AssetCashFlow.portfolio_id == portfolio_id

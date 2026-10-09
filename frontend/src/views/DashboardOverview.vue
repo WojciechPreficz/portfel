@@ -131,7 +131,7 @@
       <strong v-else :class="trendClass(summary?.xirr_pct)">{{
         formatPercent(summary?.xirr_pct)
       }}</strong>
-      <p class="metric-sub">Zwrot ważony czasem</p>
+      <p class="metric-sub">Zwrot ważony kapitałem</p>
     </div>
     <section class="panel chart-panel">
       <div class="section-heading">
@@ -170,8 +170,17 @@
       <div v-if="!summary?.positions.length && !loading" class="empty-state">
         <div class="empty-icon">+</div>
         <h3>{{ isAggregate ? 'Utwórz pierwszy portfel' : 'Portfel czeka na pierwszy zakup' }}</h3>
-        <p>{{ isAggregate ? 'Twoje portfele i ich łączna wartość pojawią się tutaj.' : 'Dodaj transakcję, aby zacząć śledzić wartość i wynik.' }}</p>
-        <button class="button button-primary" @click="isAggregate ? $emit('createPortfolio') : $emit('addPurchase')">
+        <p>
+          {{
+            isAggregate
+              ? 'Twoje portfele i ich łączna wartość pojawią się tutaj.'
+              : 'Dodaj transakcję, aby zacząć śledzić wartość i wynik.'
+          }}
+        </p>
+        <button
+          class="button button-primary"
+          @click="isAggregate ? $emit('createPortfolio') : $emit('addPurchase')"
+        >
           {{ isAggregate ? 'Utwórz portfel' : 'Dodaj pierwszy zakup' }}
         </button>
       </div>

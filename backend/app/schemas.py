@@ -102,6 +102,8 @@ class PositionOut(BaseModel):
 
 class PortfolioSummary(BaseModel):
     value_pln: Decimal | None
+    cash_pln: Decimal | None = None
+    total_value_pln: Decimal | None = None
     value_prev_pln: Decimal | None
     change_1d_pln: Decimal | None
     change_1d_pct: Decimal | None
