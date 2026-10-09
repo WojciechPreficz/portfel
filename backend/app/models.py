@@ -2,7 +2,7 @@ from datetime import date as date_type, datetime
 from decimal import Decimal
 from enum import Enum
 
-from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String, UniqueConstraint, func
+from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Numeric, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -14,6 +14,7 @@ class InstrumentType(str, Enum):
     stock_us_nyse = "stock_us_nyse"
     etf = "etf"
     gold = "gold"
+    real_estate = "real_estate"
 
 
 class Portfolio(Base):
@@ -25,6 +26,7 @@ class Portfolio(Base):
 
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="portfolio")
     deposits: Mapped[list["CashDeposit"]] = relationship(back_populates="portfolio")
+    asset_cash_flows: Mapped[list["AssetCashFlow"]] = relationship(back_populates="portfolio")
 
 
 class TransactionType(str, Enum):
@@ -47,6 +49,8 @@ class Instrument(Base):
 
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="instrument")
     prices: Mapped[list["Price"]] = relationship(back_populates="instrument")
+    property_details: Mapped["PropertyDetails | None"] = relationship(back_populates="instrument")
+    asset_cash_flows: Mapped[list["AssetCashFlow"]] = relationship(back_populates="instrument")
 
 
 class Transaction(Base):
@@ -101,3 +105,35 @@ class FxRate(Base):
     pair: Mapped[str] = mapped_column(String(8), index=True)
     date: Mapped[date_type] = mapped_column(Date, index=True)
     rate: Mapped[Decimal] = mapped_column(Numeric(18, 8))
+
+
+class PropertyDetails(Base):
+    __tablename__ = "property_details"
+
+    instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"), primary_key=True)
+    area_m2: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    address: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    rental_tax_rate: Mapped[Decimal] = mapped_column(Numeric(5, 4), default=Decimal("0.085"))
+    interpolate_valuations: Mapped[bool] = mapped_column(default=False)
+
+    instrument: Mapped[Instrument] = relationship(back_populates="property_details")
+
+
+class AssetCashFlow(Base):
+    __tablename__ = "asset_cash_flows"
+    __table_args__ = (CheckConstraint("amount > 0", name="ck_asset_cash_flows_amount_positive"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    portfolio_id: Mapped[int] = mapped_column(ForeignKey("portfolios.id"), index=True)
+    instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"), index=True)
+    date: Mapped[date_type] = mapped_column(Date, index=True)
+    kind: Mapped[str] = mapped_column(String(16))
+    category: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 2))
+    tax_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal("0"))
+    currency: Mapped[str] = mapped_column(String(3), default="PLN")
+    note: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    portfolio: Mapped[Portfolio] = relationship(back_populates="asset_cash_flows")
+    instrument: Mapped[Instrument] = relationship(back_populates="asset_cash_flows")

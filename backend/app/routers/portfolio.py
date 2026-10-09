@@ -3,7 +3,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import CashDeposit, Instrument, Portfolio, Price, Transaction
+from app.models import AssetCashFlow, CashDeposit, Instrument, Portfolio, Price, PropertyDetails, Transaction
 from app.schemas import HistoryPoint, PortfolioCreate, PortfolioOut, PortfolioSummary
 from app.services.portfolio import build_history, build_summary
 
@@ -70,11 +70,21 @@ def delete_holdings(portfolio_id: int, db: Session = Depends(get_db)):
 
 def _delete_portfolio_data(db: Session, portfolio_id: int):
     deleted_deposits = db.query(CashDeposit).filter(CashDeposit.portfolio_id == portfolio_id).delete()
+    deleted_asset_cash_flows = db.query(AssetCashFlow).filter(
+        AssetCashFlow.portfolio_id == portfolio_id
+    ).delete()
     instrument_ids = db.scalars(
         select(Transaction.instrument_id).where(Transaction.portfolio_id == portfolio_id).distinct()
     ).all()
     if not instrument_ids:
-        return {"deleted_instruments": 0, "deleted_transactions": 0, "deleted_prices": 0, "deleted_deposits": deleted_deposits}
+        return {
+            "deleted_instruments": 0,
+            "deleted_transactions": 0,
+            "deleted_prices": 0,
+            "deleted_deposits": deleted_deposits,
+            "deleted_asset_cash_flows": deleted_asset_cash_flows,
+            "deleted_property_details": 0,
+        }
 
     deleted_transactions = db.execute(
         delete(Transaction).where(
@@ -87,8 +97,22 @@ def _delete_portfolio_data(db: Session, portfolio_id: int):
         .where(
             Instrument.id.in_(instrument_ids),
             ~select(Transaction.id).where(Transaction.instrument_id == Instrument.id).exists(),
+            ~select(AssetCashFlow.id)
+            .where(AssetCashFlow.instrument_id == Instrument.id)
+            .exists(),
         )
     ).all()
+    manual_instrument_ids = db.scalars(
+        select(Instrument.id).where(
+            Instrument.id.in_(unused_instrument_ids),
+            Instrument.provider == "manual",
+        )
+    ).all()
+    deleted_property_details = db.execute(
+        delete(PropertyDetails).where(
+            PropertyDetails.instrument_id.in_(manual_instrument_ids)
+        )
+    ).rowcount
     deleted_prices = db.execute(delete(Price).where(Price.instrument_id.in_(unused_instrument_ids))).rowcount
     deleted_instruments = db.execute(
         delete(Instrument).where(Instrument.id.in_(unused_instrument_ids))
@@ -98,4 +122,6 @@ def _delete_portfolio_data(db: Session, portfolio_id: int):
         "deleted_transactions": deleted_transactions,
         "deleted_prices": deleted_prices,
         "deleted_deposits": deleted_deposits,
+        "deleted_asset_cash_flows": deleted_asset_cash_flows,
+        "deleted_property_details": deleted_property_details,
     }

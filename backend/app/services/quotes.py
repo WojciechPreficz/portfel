@@ -149,7 +149,8 @@ def refresh_quotes(
     instruments = [
         instrument
         for instrument in db.scalars(instruments_query).all()
-        if instrument.ticker.upper() not in UNQUOTED_INSTRUMENT_TICKERS
+        if not (instrument.type == "real_estate" and instrument.provider == "manual")
+        and instrument.ticker.upper() not in UNQUOTED_INSTRUMENT_TICKERS
     ]
     starts = {
         instrument.id: _instrument_start(db, instrument, end, years)

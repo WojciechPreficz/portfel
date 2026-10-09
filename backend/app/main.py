@@ -18,7 +18,7 @@ from app.config import (
 )
 from app.database import SessionLocal, engine
 from app.models import Base, Portfolio
-from app.routers import fx, instruments, portfolio, quotes, transactions
+from app.routers import fx, instruments, portfolio, quotes, real_estate, transactions
 from app.seed import seed_instruments
 
 
@@ -148,6 +148,9 @@ protected_routers = (
     portfolio.portfolios_router,
     quotes.router,
     fx.router,
+    real_estate.router,
+    real_estate.instrument_router,
+    real_estate.cash_flows_router,
 )
 for router in protected_routers:
     app.include_router(router, dependencies=[Depends(require_auth)])

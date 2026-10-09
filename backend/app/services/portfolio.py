@@ -4,7 +4,15 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import CashDeposit, FxRate, Instrument, Price, Transaction
+from app.models import (
+    AssetCashFlow,
+    CashDeposit,
+    FxRate,
+    Instrument,
+    Price,
+    PropertyDetails,
+    Transaction,
+)
 
 ZERO = Decimal("0")
 HUNDRED = Decimal("100")
@@ -119,12 +127,55 @@ def position_metrics(txs: list[Transaction], db: Session, on_date: date, fx_cach
                 buy_cost_pln += _as_decimal(tx.purchase_price_pln) + _as_decimal(tx.commission) * fx
             else:
                 buy_cost_pln += (_as_decimal(tx.quantity) * _as_decimal(tx.price) + _as_decimal(tx.commission)) * fx
+    if txs:
+        capex_query = select(AssetCashFlow).where(
+            AssetCashFlow.instrument_id == txs[0].instrument_id,
+            AssetCashFlow.kind == "CAPEX",
+            AssetCashFlow.date <= on_date,
+            AssetCashFlow.portfolio_id.in_({tx.portfolio_id for tx in txs})
+        )
+        capex_rows = db.scalars(capex_query).all()
+    else:
+        capex_rows = []
+    capex_pln = ZERO
+    for cash_flow in capex_rows:
+        fx = fx_on(db, cash_flow.currency, cash_flow.date, fx_cache)
+        if fx is None:
+            has_missing_fx = True
+        else:
+            capex_pln += _as_decimal(cash_flow.amount) * fx
     if has_missing_fx:
         avg_cost = cost_pln = None
     else:
-        avg_cost = (buy_cost_pln / buy_qty) if buy_qty else ZERO
+        avg_cost = ((buy_cost_pln + capex_pln) / buy_qty) if buy_qty else ZERO
         cost_pln = avg_cost * qty if qty else ZERO
     return qty, avg_cost, cost_pln
+
+
+def _cash_flow_amount_pln(db: Session, cash_flow: AssetCashFlow, fx_cache=None) -> Decimal | None:
+    fx = fx_on(db, cash_flow.currency, cash_flow.date, fx_cache)
+    return _as_decimal(cash_flow.amount) * fx if fx is not None else None
+
+
+def _signed_asset_cash_flow(cash_flow: AssetCashFlow, amount_pln: Decimal) -> Decimal:
+    if cash_flow.kind in {"RENT", "OTHER_INCOME"}:
+        return amount_pln - _as_decimal(cash_flow.tax_amount) * (
+            amount_pln / _as_decimal(cash_flow.amount) if cash_flow.amount else ZERO
+        )
+    return -amount_pln
+
+
+def _transaction_cash_flow(db: Session, tx: Transaction, fx_cache=None) -> Decimal | None:
+    fx = fx_on(db, tx.currency, tx.date, fx_cache)
+    if fx is None:
+        return None
+    gross = (
+        _as_decimal(tx.purchase_price_pln)
+        if tx.purchase_price_pln is not None
+        else _as_decimal(tx.quantity) * _as_decimal(tx.price) * fx
+    )
+    commission = _as_decimal(tx.commission) * fx
+    return -(gross + commission) if tx.type == "BUY" else gross - commission
 
 
 def portfolio_value_on(
@@ -153,9 +204,15 @@ def portfolio_value_on(
 def build_summary(db: Session, portfolio_id: int | None = None) -> dict:
     transaction_query = select(Transaction).options(selectinload(Transaction.instrument))
     deposit_query = select(CashDeposit)
+    asset_cash_flow_query = (
+        select(AssetCashFlow)
+        .where(AssetCashFlow.date <= date.today())
+        .order_by(AssetCashFlow.date, AssetCashFlow.id)
+    )
     if portfolio_id is not None:
         transaction_query = transaction_query.where(Transaction.portfolio_id == portfolio_id)
         deposit_query = deposit_query.where(CashDeposit.portfolio_id == portfolio_id)
+        asset_cash_flow_query = asset_cash_flow_query.where(AssetCashFlow.portfolio_id == portfolio_id)
     transactions = list(
         db.scalars(
             transaction_query.order_by(Transaction.date)
@@ -260,6 +317,89 @@ def build_summary(db: Session, portfolio_id: int | None = None) -> dict:
     )
     change_1d = value - value_prev if value is not None and value_prev is not None else None
     deposits = list(db.scalars(deposit_query.order_by(CashDeposit.date, CashDeposit.id)).all())
+    asset_cash_flows = list(db.scalars(asset_cash_flow_query).all())
+    cash_flows_by_instrument: dict[int, list[AssetCashFlow]] = {}
+    for cash_flow in asset_cash_flows:
+        cash_flows_by_instrument.setdefault(cash_flow.instrument_id, []).append(cash_flow)
+    total_income = ZERO
+    total_costs = ZERO
+    total_capex = ZERO
+    has_missing_asset_cash_flow_fx = False
+    for cash_flow in asset_cash_flows:
+        amount_pln = _cash_flow_amount_pln(db, cash_flow, fx_cache)
+        if amount_pln is None:
+            has_missing_asset_cash_flow_fx = True
+            continue
+        tax_pln = _as_decimal(cash_flow.tax_amount) * (
+            amount_pln / _as_decimal(cash_flow.amount)
+        ) if cash_flow.amount else ZERO
+        if cash_flow.kind in {"RENT", "OTHER_INCOME"}:
+            total_income += amount_pln - tax_pln
+        elif cash_flow.kind in {"OPEX", "TAX"}:
+            total_costs += amount_pln
+        elif cash_flow.kind == "CAPEX":
+            total_capex += amount_pln
+    if has_missing_asset_cash_flow_fx:
+        total_income = total_costs = total_capex = None
+
+    for position in positions:
+        instrument_id = position["instrument"].id
+        instrument_flows = cash_flows_by_instrument.get(instrument_id, [])
+        position_income = ZERO
+        position_costs = ZERO
+        position_capex = ZERO
+        missing_position_flow_fx = False
+        for cash_flow in instrument_flows:
+            amount_pln = _cash_flow_amount_pln(db, cash_flow, fx_cache)
+            if amount_pln is None:
+                missing_position_flow_fx = True
+                continue
+            tax_pln = _as_decimal(cash_flow.tax_amount) * (
+                amount_pln / _as_decimal(cash_flow.amount)
+            ) if cash_flow.amount else ZERO
+            if cash_flow.kind in {"RENT", "OTHER_INCOME"}:
+                position_income += amount_pln - tax_pln
+            elif cash_flow.kind in {"OPEX", "TAX"}:
+                position_costs += amount_pln
+            elif cash_flow.kind == "CAPEX":
+                position_capex += amount_pln
+        position["income_pln"] = None if missing_position_flow_fx else position_income
+        position["costs_pln"] = None if missing_position_flow_fx else position_costs
+        position["capex_pln"] = None if missing_position_flow_fx else position_capex
+        position["total_return_pln"] = (
+            position["pnl_pln"] + position_income - position_costs
+            if position["pnl_pln"] is not None and not missing_position_flow_fx
+            else None
+        )
+        position["valuation_date"] = position["price_date"]
+        instrument = position["instrument"]
+        if instrument.type == "real_estate" or instrument_flows:
+            position_xirr_flows: list[tuple[date, Decimal]] = []
+            missing_position_xirr_fx = False
+            for tx in grouped[instrument_id]:
+                tx_flow = _transaction_cash_flow(db, tx, fx_cache)
+                if tx_flow is None:
+                    missing_position_xirr_fx = True
+                else:
+                    position_xirr_flows.append((tx.date, tx_flow))
+            for cash_flow in instrument_flows:
+                amount_pln = _cash_flow_amount_pln(db, cash_flow, fx_cache)
+                if amount_pln is None:
+                    missing_position_xirr_fx = True
+                else:
+                    position_xirr_flows.append((cash_flow.date, _signed_asset_cash_flow(cash_flow, amount_pln)))
+            market = position["market_value_pln"]
+            if market is not None:
+                position_xirr_flows.append((position["valuation_date"] or today, market))
+            result = (
+                xirr(sorted(position_xirr_flows, key=lambda item: item[0]))
+                if not missing_position_xirr_fx and market is not None
+                else None
+            )
+            position["xirr_pct"] = result * HUNDRED if result is not None else None
+        else:
+            position["xirr_pct"] = None
+
     cash_flows = []
     deposit_portfolio_ids = {deposit.portfolio_id for deposit in deposits}
     for deposit in deposits:
@@ -282,6 +422,12 @@ def build_summary(db: Session, portfolio_id: int | None = None) -> dict:
         )
         commission = _as_decimal(tx.commission) * fx
         cash_flows.append((tx.date, -(gross + commission) if tx.type == "BUY" else gross - commission))
+    for cash_flow in asset_cash_flows:
+        amount_pln = _cash_flow_amount_pln(db, cash_flow, fx_cache)
+        if amount_pln is None:
+            has_missing_cash_flow_fx = True
+        else:
+            cash_flows.append((cash_flow.date, _signed_asset_cash_flow(cash_flow, amount_pln)))
     if value:
         cash_flows.append((as_of or today, value))
     annual_return = (
@@ -306,8 +452,233 @@ def build_summary(db: Session, portfolio_id: int | None = None) -> dict:
             else None
         ),
         "xirr_pct": annual_return * HUNDRED if annual_return is not None else None,
+        "income_pln": total_income,
+        "costs_pln": total_costs,
+        "total_return_pln": (
+            (value - total_cost + total_income - total_costs)
+            if value is not None and not has_missing_costs and total_income is not None and total_costs is not None
+            else None
+        ),
         "as_of": as_of,
         "positions": positions,
+    }
+
+
+def build_property_metrics(
+    db: Session,
+    instrument_id: int,
+    portfolio_id: int | None,
+    date_from: date,
+    date_to: date,
+) -> dict:
+    instrument = db.get(Instrument, instrument_id)
+    details = db.get(PropertyDetails, instrument_id)
+    if instrument is None or details is None or date_from > date_to:
+        return {
+            "purchase_cost_pln": None,
+            "capex_pln": None,
+            "cost_basis_pln": None,
+            "valuation_pln": None,
+            "valuation_date": None,
+            "price_per_m2": None,
+            "rent_gross_pln": None,
+            "other_income_pln": None,
+            "tax_pln": None,
+            "opex_pln": None,
+            "capex_in_period_pln": None,
+            "net_cash_flow_pln": None,
+            "gross_yield_pct": None,
+            "net_yield_pct": None,
+            "value_change_pln": None,
+            "total_return_pln": None,
+            "xirr_pct": None,
+            "cash_flows_by_category": [],
+        }
+
+    fx_cache: dict = {}
+    transaction_query = select(Transaction).where(Transaction.instrument_id == instrument_id)
+    cash_flow_query = select(AssetCashFlow).where(AssetCashFlow.instrument_id == instrument_id)
+    if portfolio_id is not None:
+        transaction_query = transaction_query.where(Transaction.portfolio_id == portfolio_id)
+        cash_flow_query = cash_flow_query.where(AssetCashFlow.portfolio_id == portfolio_id)
+    transactions = list(db.scalars(transaction_query.order_by(Transaction.date, Transaction.id)).all())
+    all_cash_flows = list(db.scalars(cash_flow_query.order_by(AssetCashFlow.date, AssetCashFlow.id)).all())
+    current_flows = [flow for flow in all_cash_flows if flow.date <= date_to]
+    period_flows = [flow for flow in current_flows if date_from <= flow.date <= date_to]
+
+    purchase_cost = ZERO
+    has_purchase = False
+    missing_purchase_fx = False
+    period_purchase_cost = ZERO
+    bought_in_period = False
+    for tx in transactions:
+        if tx.type != "BUY" or tx.date > date_to:
+            continue
+        fx = fx_on(db, tx.currency, tx.date, fx_cache)
+        if fx is None:
+            missing_purchase_fx = True
+            continue
+        gross = (
+            _as_decimal(tx.purchase_price_pln)
+            if tx.purchase_price_pln is not None
+            else _as_decimal(tx.quantity) * _as_decimal(tx.price) * fx
+        )
+        total = gross + _as_decimal(tx.commission) * fx
+        purchase_cost += total
+        has_purchase = True
+        if date_from <= tx.date <= date_to:
+            period_purchase_cost += total
+            bought_in_period = True
+    purchase_cost_result = None if missing_purchase_fx or not has_purchase else purchase_cost
+
+    capex_total = ZERO
+    has_capex = False
+    missing_capex_fx = False
+    for flow in current_flows:
+        if flow.kind != "CAPEX":
+            continue
+        amount_pln = _cash_flow_amount_pln(db, flow, fx_cache)
+        if amount_pln is None:
+            missing_capex_fx = True
+        else:
+            capex_total += amount_pln
+            has_capex = True
+    capex_result = None if missing_capex_fx or not has_capex else capex_total
+    cost_basis = (
+        purchase_cost + capex_total
+        if not missing_purchase_fx and not missing_capex_fx and has_purchase
+        else None
+    )
+
+    valuation = price_on(db, instrument_id, date_to)
+    valuation_fx = fx_on(db, valuation.currency, date_to, fx_cache) if valuation else None
+    valuation_pln = _as_decimal(valuation.close) * valuation_fx if valuation and valuation_fx is not None else None
+    price_per_m2 = (
+        valuation_pln / _as_decimal(details.area_m2)
+        if valuation_pln is not None and details.area_m2
+        else None
+    )
+
+    totals = {"RENT": ZERO, "OTHER_INCOME": ZERO, "OPEX": ZERO, "CAPEX": ZERO, "TAX": ZERO}
+    kinds_seen: set[str] = set()
+    tax_total = ZERO
+    net_cash_flow = ZERO
+    missing_period_fx = False
+    category_totals: dict[tuple[str, str | None], Decimal] = {}
+    for flow in period_flows:
+        amount_pln = _cash_flow_amount_pln(db, flow, fx_cache)
+        if amount_pln is None:
+            missing_period_fx = True
+            continue
+        kinds_seen.add(flow.kind)
+        totals[flow.kind] = totals.get(flow.kind, ZERO) + amount_pln
+        tax_pln = _as_decimal(flow.tax_amount) * (
+            amount_pln / _as_decimal(flow.amount)
+        ) if flow.amount else ZERO
+        if flow.kind in {"RENT", "OTHER_INCOME"}:
+            tax_total += tax_pln
+            net_cash_flow += amount_pln - tax_pln
+        else:
+            net_cash_flow -= amount_pln
+            if flow.kind == "TAX":
+                tax_total += amount_pln
+        category_key = (flow.kind, flow.category)
+        category_totals[category_key] = category_totals.get(category_key, ZERO) + amount_pln
+    if missing_period_fx:
+        rent_gross = other_income = tax_period = opex = capex_period = net_cash_flow_result = None
+    else:
+        rent_gross = totals["RENT"] if "RENT" in kinds_seen else None
+        other_income = totals["OTHER_INCOME"] if "OTHER_INCOME" in kinds_seen else None
+        tax_period = tax_total if period_flows else None
+        opex = totals["OPEX"] if "OPEX" in kinds_seen else None
+        capex_period = totals["CAPEX"] if "CAPEX" in kinds_seen else None
+        net_cash_flow_result = net_cash_flow if period_flows else None
+
+    period_days = (date_to - date_from).days + 1
+    gross_yield = (
+        rent_gross * Decimal("365") / Decimal(period_days) / cost_basis * HUNDRED
+        if rent_gross is not None and cost_basis
+        else None
+    )
+    net_yield_base = (
+        rent_gross - (tax_period or ZERO) - (opex or ZERO)
+        if rent_gross is not None and tax_period is not None
+        else None
+    )
+    net_yield = (
+        net_yield_base * Decimal("365") / Decimal(period_days) / cost_basis * HUNDRED
+        if net_yield_base is not None and cost_basis
+        else None
+    )
+
+    start_valuation = price_on(db, instrument_id, date_from)
+    start_valuation_pln = None
+    if start_valuation is not None:
+        start_fx = fx_on(db, start_valuation.currency, date_from, fx_cache)
+        if start_fx is not None:
+            start_valuation_pln = _as_decimal(start_valuation.close) * start_fx
+    value_change_base = period_purchase_cost if bought_in_period else start_valuation_pln
+    value_change = valuation_pln - value_change_base if valuation_pln is not None and value_change_base is not None else None
+    total_return = (
+        value_change + net_cash_flow_result
+        if value_change is not None and net_cash_flow_result is not None
+        else None
+    )
+
+    xirr_flows: list[tuple[date, Decimal]] = []
+    missing_xirr_fx = False
+    for tx in transactions:
+        if tx.date > date.today():
+            continue
+        tx_flow = _transaction_cash_flow(db, tx, fx_cache)
+        if tx_flow is None:
+            missing_xirr_fx = True
+        else:
+            xirr_flows.append((tx.date, tx_flow))
+    for flow in all_cash_flows:
+        if flow.date > date.today():
+            continue
+        amount_pln = _cash_flow_amount_pln(db, flow, fx_cache)
+        if amount_pln is None:
+            missing_xirr_fx = True
+        else:
+            xirr_flows.append((flow.date, _signed_asset_cash_flow(flow, amount_pln)))
+    today = date.today()
+    latest_valuation = price_on(db, instrument_id, today)
+    if latest_valuation is not None:
+        latest_fx = fx_on(db, latest_valuation.currency, today, fx_cache)
+        if latest_fx is None:
+            missing_xirr_fx = True
+        else:
+            xirr_flows.append((today, _as_decimal(latest_valuation.close) * latest_fx))
+    xirr_value = (
+        xirr(sorted(xirr_flows, key=lambda item: item[0]))
+        if not missing_xirr_fx and latest_valuation is not None
+        else None
+    )
+    category_rows = [
+        {"kind": kind, "category": category, "amount_pln": amount}
+        for (kind, category), amount in sorted(category_totals.items(), key=lambda item: (item[0][0], item[0][1] or ""))
+    ]
+    return {
+        "purchase_cost_pln": purchase_cost_result,
+        "capex_pln": capex_result,
+        "cost_basis_pln": cost_basis,
+        "valuation_pln": valuation_pln,
+        "valuation_date": valuation.date if valuation else None,
+        "price_per_m2": price_per_m2,
+        "rent_gross_pln": None if missing_period_fx else rent_gross,
+        "other_income_pln": None if missing_period_fx else other_income,
+        "tax_pln": None if missing_period_fx else tax_period,
+        "opex_pln": None if missing_period_fx else opex,
+        "capex_in_period_pln": None if missing_period_fx else capex_period,
+        "net_cash_flow_pln": net_cash_flow_result,
+        "gross_yield_pct": gross_yield,
+        "net_yield_pct": net_yield,
+        "value_change_pln": value_change,
+        "total_return_pln": total_return,
+        "xirr_pct": xirr_value * HUNDRED if xirr_value is not None else None,
+        "cash_flows_by_category": category_rows,
     }
 
 
