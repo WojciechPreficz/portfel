@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed } from 'vue';
+  import { computed, ref } from 'vue';
   import { use } from 'echarts/core';
   import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components';
   import { LineChart, PieChart } from 'echarts/charts';
@@ -53,6 +53,16 @@
     ],
   }));
 
+  const allocationColors = ['#17201b', '#b9e85d', '#ee806d', '#8cb7a4', '#d8ae57'];
+  const allocationSelected = ref<Record<string, boolean>>({});
+
+  const toggleAllocation = (ticker: string) => {
+    allocationSelected.value = {
+      ...allocationSelected.value,
+      [ticker]: allocationSelected.value[ticker] === false,
+    };
+  };
+
   const allocationOption = computed(() => ({
     tooltip: {
       trigger: 'item',
@@ -63,12 +73,12 @@
         return `${position?.instrument.name ?? params.name}: ${params.percent}%`;
       },
     },
-    legend: { bottom: 0, left: 'center', textStyle: { color: '#596158' } },
+    legend: { show: false, selected: allocationSelected.value },
     series: [
       {
         type: 'pie',
         radius: ['52%', '76%'],
-        center: ['50%', '42%'],
+        center: ['50%', '50%'],
         avoidLabelOverlap: true,
         label: { show: false },
         data: (props.summary?.positions ?? []).map((position) => ({
@@ -78,7 +88,7 @@
         itemStyle: { borderColor: '#fbfcf8', borderWidth: 3 },
       },
     ],
-    color: ['#17201b', '#b9e85d', '#ee806d', '#8cb7a4', '#d8ae57'],
+    color: allocationColors,
   }));
 
   const hasUnpricedPositions = computed(() =>
@@ -157,7 +167,26 @@
       <div v-else-if="hasUnpricedPositions" class="empty-allocation">
         Alokacja niedostępna — brakuje notowań.
       </div>
-      <VChart v-else class="allocation-chart" :option="allocationOption" autoresize />
+      <div v-else>
+        <VChart class="allocation-chart" :option="allocationOption" autoresize />
+        <div class="allocation-legend" role="group" aria-label="Pozycje na wykresie alokacji">
+          <button
+            v-for="(position, index) in summary?.positions"
+            :key="position.instrument.id"
+            type="button"
+            class="allocation-legend-item"
+            :aria-pressed="allocationSelected[position.instrument.ticker] !== false"
+            @click="toggleAllocation(position.instrument.ticker)"
+          >
+            <span
+              class="allocation-legend-swatch"
+              :style="{ backgroundColor: allocationColors[index % allocationColors.length] }"
+              aria-hidden="true"
+            ></span>
+            {{ position.instrument.ticker }}
+          </button>
+        </div>
+      </div>
     </section>
     <section class="panel positions-panel">
       <div class="section-heading">
