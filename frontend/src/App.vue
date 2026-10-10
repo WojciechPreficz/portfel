@@ -34,6 +34,8 @@
     dismissNotice,
     historyDates,
     historyValues,
+    historyLoading,
+    historyError,
     form,
     filteredInstruments,
     positionToRemove,
@@ -144,6 +146,8 @@
           :removing-all="removingAll"
           :history-dates="historyDates"
           :history-values="historyValues"
+          :history-loading="historyLoading"
+          :history-error="historyError"
           :is-aggregate="activePortfolioId === null"
           @add-purchase="showTransactionForm = true"
           @create-portfolio="createPortfolio"

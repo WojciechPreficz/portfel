@@ -12,8 +12,16 @@ import {
 export type TransactionInput = Omit<TransactionPayload, 'portfolio_id' | 'type'>;
 
 export const portfolioService = {
-  loadSnapshot(portfolioId: number | null) {
-    return Promise.all([getPortfolio(portfolioId), getHistory(portfolioId), getInstruments()]);
+  loadSummary(portfolioId: number | null) {
+    return getPortfolio(portfolioId);
+  },
+
+  loadHistory(portfolioId: number | null) {
+    return getHistory(portfolioId);
+  },
+
+  loadInstruments() {
+    return getInstruments();
   },
 
   buy(portfolioId: number, payload: TransactionInput) {

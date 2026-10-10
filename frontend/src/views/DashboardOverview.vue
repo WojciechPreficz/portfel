@@ -21,6 +21,8 @@
     loading: boolean;
     historyDates: string[];
     historyValues: number[];
+    historyLoading: boolean;
+    historyError: string;
     isAggregate: boolean;
   }>();
 
@@ -143,18 +145,28 @@
       }}</strong>
       <p class="metric-sub">Zwrot ważony kapitałem</p>
     </div>
-    <section class="panel chart-panel">
+    <section class="panel chart-panel" :aria-busy="historyLoading">
       <div class="section-heading">
         <div>
           <p class="panel-kicker">WARTOŚĆ W CZASIE</p>
           <h2>Jak rośnie kapitał</h2>
         </div>
-        <span class="heading-meta">PLN</span>
+        <span v-if="historyLoading" class="heading-meta" role="status">Ładuję wykres...</span>
+        <span v-else class="heading-meta">PLN</span>
       </div>
-      <div v-if="!historyValues.length && !loading" class="empty-chart">
+      <p v-if="historyError" class="alert alert-error" role="alert">{{ historyError }}</p>
+      <div v-if="!historyValues.length && historyLoading" class="empty-chart">
+        Pobieram historię portfela...
+      </div>
+      <div v-else-if="!historyValues.length && !historyError" class="empty-chart">
         Historia pojawi się po dodaniu transakcji i pobraniu cen.
       </div>
-      <VChart v-else class="main-chart" :option="chartOption" autoresize />
+      <VChart
+        v-else-if="historyValues.length"
+        class="main-chart"
+        :option="chartOption"
+        autoresize
+      />
     </section>
     <section class="panel allocation-panel">
       <div class="section-heading">

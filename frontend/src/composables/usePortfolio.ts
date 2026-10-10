@@ -45,6 +45,10 @@ export const usePortfolio = (
   const notice = ref('');
   const historyDates = ref<string[]>([]);
   const historyValues = ref<number[]>([]);
+  const historyLoading = ref(false);
+  const historyError = ref('');
+  let loadVersion = 0;
+  let displayedPortfolioId: number | null | undefined;
   const form = ref(emptyTransactionForm());
   const positionToRemove = ref<Position | null>(null);
   const removalQuantity = ref('');
@@ -54,21 +58,62 @@ export const usePortfolio = (
     instruments.value.filter((instrument) => instrument.type === form.value.marketType),
   );
 
-  const loadData = async (showLoading = true) => {
-    if (showLoading) loading.value = true;
-    error.value = '';
+  const isCurrentLoad = (version: number, selectedPortfolioId: number | null) =>
+    version === loadVersion && enabled.value && portfolioId.value === selectedPortfolioId;
+
+  const loadHistory = async (version: number, selectedPortfolioId: number | null) => {
+    historyLoading.value = true;
+    historyError.value = '';
     try {
-      const [portfolio, history, catalog] = await portfolioService.loadSnapshot(portfolioId.value);
-      summary.value = portfolio;
-      instruments.value = catalog;
+      const history = await portfolioService.loadHistory(selectedPortfolioId);
+      if (!isCurrentLoad(version, selectedPortfolioId)) return;
       historyDates.value = history.map((point) => point.date);
       historyValues.value = history.map((point) => point.value_pln);
+    } catch (reason) {
+      if (!isCurrentLoad(version, selectedPortfolioId)) return;
+      const detail = reason instanceof Error ? ` ${reason.message}` : '';
+      historyError.value = `Nie udało się pobrać historii portfela.${detail}`;
+    } finally {
+      if (isCurrentLoad(version, selectedPortfolioId)) historyLoading.value = false;
+    }
+  };
+
+  const loadInstruments = async (version: number, selectedPortfolioId: number | null) => {
+    try {
+      const catalog = await portfolioService.loadInstruments();
+      if (isCurrentLoad(version, selectedPortfolioId)) instruments.value = catalog;
+    } catch (reason) {
+      if (!isCurrentLoad(version, selectedPortfolioId)) return;
+      const detail = reason instanceof Error ? ` ${reason.message}` : '';
+      error.value = `Nie udało się pobrać katalogu instrumentów.${detail}`;
+    }
+  };
+
+  const loadData = async (showLoading = true) => {
+    if (!enabled.value) return false;
+    const version = ++loadVersion;
+    const selectedPortfolioId = portfolioId.value;
+    if (displayedPortfolioId !== selectedPortfolioId) {
+      summary.value = null;
+      historyDates.value = [];
+      historyValues.value = [];
+      displayedPortfolioId = selectedPortfolioId;
+    }
+    if (showLoading || !summary.value) loading.value = true;
+    error.value = '';
+    void loadHistory(version, selectedPortfolioId);
+    void loadInstruments(version, selectedPortfolioId);
+    try {
+      const portfolio = await portfolioService.loadSummary(selectedPortfolioId);
+      if (!isCurrentLoad(version, selectedPortfolioId)) return false;
+      summary.value = portfolio;
       return true;
     } catch (reason) {
+      if (!isCurrentLoad(version, selectedPortfolioId)) return false;
       error.value = reason instanceof Error ? reason.message : 'Nie udało się pobrać danych.';
       return false;
     } finally {
-      if (showLoading) loading.value = false;
+      if (isCurrentLoad(version, selectedPortfolioId)) loading.value = false;
     }
   };
 
@@ -266,7 +311,15 @@ export const usePortfolio = (
       if (isEnabled) {
         void loadData();
       } else {
+        ++loadVersion;
         loading.value = false;
+        historyLoading.value = false;
+        summary.value = null;
+        instruments.value = [];
+        historyDates.value = [];
+        historyValues.value = [];
+        historyError.value = '';
+        displayedPortfolioId = undefined;
       }
     },
     { immediate: true },
@@ -282,6 +335,8 @@ export const usePortfolio = (
     notice,
     historyDates,
     historyValues,
+    historyLoading,
+    historyError,
     form,
     filteredInstruments,
     positionToRemove,

@@ -117,7 +117,7 @@ def position_metrics(txs: list[Transaction], db: Session, on_date: date, fx_cach
     # a fully closed pool must not affect a later purchase or another portfolio.
     pools = {}
     txs = [tx for tx in txs if tx.date <= on_date]
-    if txs:
+    if txs and txs[0].instrument.type == "real_estate":
         capex_query = select(AssetCashFlow).where(
             AssetCashFlow.instrument_id == txs[0].instrument_id,
             AssetCashFlow.kind == "CAPEX",
@@ -237,7 +237,7 @@ def portfolio_value_on(
     grouped = holdings_as_of(transactions, on_date)
     total = ZERO
     for instrument_id, txs in grouped.items():
-        qty, _avg, _cost = position_metrics(txs, db, on_date, fx_cache)
+        qty = sum((_signed_qty(tx) for tx in txs), ZERO)
         if qty == 0:
             continue
         px = price_on(db, instrument_id, on_date, price_cache)
@@ -764,12 +764,61 @@ def build_history(db: Session, portfolio_id: int | None = None) -> list[dict]:
     days = [d for d in days if start <= d <= end]
     if not days:
         days = [end]
-    fx_cache: dict = {}
-    price_cache: dict = {}
+    # Load valuations once, including those before the first transaction so
+    # that stale prices and exchange rates still carry forward correctly.
+    instrument_ids = {tx.instrument_id for tx in transactions}
+    prices = list(db.execute(
+        select(Price.instrument_id, Price.date, Price.close, Price.currency)
+        .where(Price.instrument_id.in_(instrument_ids), Price.date <= end)
+        .order_by(Price.date)
+    ).all())
+    pairs = {f"{row.currency.upper()}PLN" for row in prices if row.currency.upper() != "PLN"}
+    rates = list(db.execute(
+        select(FxRate.pair, FxRate.date, FxRate.rate)
+        .where(FxRate.pair.in_(pairs), FxRate.date <= end)
+        .order_by(FxRate.date)
+    ).all())
+
+    # Keep the existing chart dates (including dates from other portfolios),
+    # but advance each transaction, price and FX row only once.
+    transaction_iter = iter(transactions)
+    price_iter = iter(prices)
+    rate_iter = iter(rates)
+    next_transaction = next(transaction_iter, None)
+    next_price = next(price_iter, None)
+    next_rate = next(rate_iter, None)
+    quantities: dict[int, Decimal] = {}
+    latest_prices: dict[int, tuple[Decimal, str]] = {}
+    latest_rates: dict[str, Decimal] = {}
     series = []
     last_value = None
     for d in days:
-        value = portfolio_value_on(db, transactions, d, price_cache, fx_cache)
+        while next_transaction is not None and next_transaction.date <= d:
+            instrument_id = next_transaction.instrument_id
+            quantity = quantities.get(instrument_id, ZERO) + _signed_qty(next_transaction)
+            if quantity:
+                quantities[instrument_id] = quantity
+            else:
+                quantities.pop(instrument_id, None)
+            next_transaction = next(transaction_iter, None)
+        while next_price is not None and next_price.date <= d:
+            latest_prices[next_price.instrument_id] = (
+                _as_decimal(next_price.close), next_price.currency.upper()
+            )
+            next_price = next(price_iter, None)
+        while next_rate is not None and next_rate.date <= d:
+            latest_rates[next_rate.pair] = _as_decimal(next_rate.rate)
+            next_rate = next(rate_iter, None)
+
+        value = ZERO
+        for instrument_id, quantity in quantities.items():
+            price = latest_prices.get(instrument_id)
+            if price is None:
+                continue
+            close, currency = price
+            fx = Decimal("1") if currency == "PLN" else latest_rates.get(f"{currency}PLN")
+            if fx is not None:
+                value += quantity * close * fx
         if value == 0 and last_value is None:
             continue
         last_value = value
