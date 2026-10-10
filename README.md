@@ -43,6 +43,17 @@ sprawdzić zgodność pliku z importerem na bazie w pamięci, bez zmiany danych 
 
 ## Uruchomienie lokalne
 
+Notowania polskich akcji i ETF-ów w PLN skonfigurowanych w Stooq są pobierane
+najpierw z Yahoo Finance (symbole `.WA`). Stooq jest źródłem zapasowym dla
+symboli, dla których Yahoo nie zwróciło danych. Po błędzie sieciowym, HTTP 429
+lub błędzie serwera Stooq aplikacja pomija to źródło przez 5 minut, a następnie
+sprawdza dostępność jednym żądaniem. Timeout połączenia wynosi 2 sekundy,
+pozostałych operacji sieciowych 3 sekundy.
+
+Waluty Yahoo są zapamiętywane na 24 godziny w pamięci procesu backendu,
+łącznie z jednostkami takimi jak pensy. Restart backendu czyści cache oraz
+stan dostępności Stooq; każda instancja backendu ma własny cache.
+
 Zalecane są Python 3.13 oraz Node.js. Obecne przypięte zależności backendu nie obsługują poprawnie Pythona 3.14.
 
 1. W pierwszym terminalu zainstaluj zależności backendu i uruchom API:

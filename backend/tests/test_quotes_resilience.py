@@ -10,11 +10,16 @@ from app.routers.quotes import gold_quote
 from app.services.adapters.base import QuotePoint
 from app.services.adapters.stooq import STOOQ_URL, StooqAdapter
 from app.services.adapters.yahoo import YahooAdapter
+from app.services.adapters import yahoo
 from app.services.portfolio import xirr
 from app.services.quotes import _fetch_history
 
 
 class YahooAdapterTest(unittest.TestCase):
+    def setUp(self):
+        with yahoo.CURRENCY_CACHE_LOCK:
+            yahoo.CURRENCY_CACHE.clear()
+
     @patch("app.routers.quotes.fetch_latest_fx")
     @patch("app.routers.quotes.YahooAdapter.fetch_last")
     def test_live_gold_quote_combines_yahoo_spot_with_nbp_rate(self, fetch_last, fetch_fx):
@@ -152,7 +157,7 @@ class YahooAdapterTest(unittest.TestCase):
 
     @patch("app.services.quotes.YahooAdapter.fetch_history")
     @patch("app.services.quotes.get_adapter")
-    def test_polish_stock_without_stooq_data_falls_back_to_yahoo(
+    def test_polish_stock_uses_yahoo_before_stooq(
         self, get_adapter, yahoo_fetch_history
     ):
         instrument = Mock(
@@ -173,6 +178,7 @@ class YahooAdapterTest(unittest.TestCase):
         yahoo_fetch_history.assert_called_once_with(
             "ACP.WA", date(2026, 9, 22), date(2026, 9, 23), "PLN"
         )
+        get_adapter.assert_not_called()
 
     @patch("app.services.quotes.YahooAdapter.fetch_history")
     @patch("app.services.quotes.get_adapter")

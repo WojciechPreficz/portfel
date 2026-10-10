@@ -42,27 +42,27 @@ def _upsert_fx(db: Session, pair: str, d: date, rate: Decimal) -> bool:
 
 
 def _fetch_history(instrument, start: date, end: date):
+    yahoo_error = None
+    if _is_polish_stooq_listing(instrument):
+        try:
+            points = YahooAdapter().fetch_history(
+                _polish_yahoo_symbol(instrument), start, end, instrument.currency
+            )
+            if points:
+                return _convert_gold_history(instrument, points)
+        except Exception as exc:
+            yahoo_error = exc
     adapter = get_adapter(instrument.provider)
     try:
         points = adapter.fetch_history(instrument.symbol, start, end, instrument.currency)
-    except Exception:
-        if not _can_fallback_to_yahoo(instrument):
-            raise
-        fallback_symbol = _polish_yahoo_symbol(instrument)
-        points = YahooAdapter().fetch_history(
-            fallback_symbol, start, end, instrument.currency
-        )
-        return _convert_gold_history(instrument, points)
-
-    if _can_fallback_to_yahoo(instrument) and not points:
-        fallback_symbol = _polish_yahoo_symbol(instrument)
-        points = YahooAdapter().fetch_history(
-            fallback_symbol, start, end, instrument.currency
-        )
+    except Exception as exc:
+        if yahoo_error is not None:
+            raise ValueError(f"Yahoo Finance: {yahoo_error}; Stooq: {exc}") from exc
+        raise
     return _convert_gold_history(instrument, points)
 
 
-def _can_fallback_to_yahoo(instrument) -> bool:
+def _is_polish_stooq_listing(instrument) -> bool:
     return (
         instrument.provider == "stooq"
         and instrument.type in {"stock_pl", "etf"}
@@ -164,8 +164,12 @@ def refresh_quotes(
     stooq_jobs: list[Instrument] = []
     for instrument in instruments:
         start = starts[instrument.id]
-        if instrument.provider == "yahoo":
-            yahoo_jobs[instrument.id] = (instrument.symbol, start)
+        if instrument.provider == "yahoo" or _is_polish_stooq_listing(instrument):
+            symbol = (
+                _polish_yahoo_symbol(instrument)
+                if _is_polish_stooq_listing(instrument) else instrument.symbol
+            )
+            yahoo_jobs[instrument.id] = (symbol, start)
             continue
         if instrument.provider != "stooq":
             try:
@@ -176,38 +180,7 @@ def refresh_quotes(
 
         stooq_jobs.append(instrument)
 
-    if stooq_jobs:
-        stooq = get_adapter("stooq")
-        worker_count = min(MAX_CONCURRENT_STOOQ_REQUESTS, len(stooq_jobs))
-        with ThreadPoolExecutor(max_workers=worker_count) as executor:
-            futures = [
-                executor.submit(
-                    stooq.fetch_history,
-                    instrument.symbol,
-                    starts[instrument.id],
-                    end,
-                    instrument.currency,
-                )
-                for instrument in stooq_jobs
-            ]
-            for instrument, future in zip(stooq_jobs, futures):
-                try:
-                    points = future.result()
-                except Exception as exc:  # noqa: BLE001
-                    if not _can_fallback_to_yahoo(instrument):
-                        errors.append(f"{instrument.ticker}: {exc}")
-                        continue
-                    points = []
-                if points:
-                    quote_points[instrument.id] = points
-                elif _can_fallback_to_yahoo(instrument):
-                    yahoo_jobs[instrument.id] = (
-                        _polish_yahoo_symbol(instrument),
-                        starts[instrument.id],
-                    )
-                else:
-                    quote_points[instrument.id] = []
-
+    yahoo_errors: dict[int, str] = {}
     yahoo_groups: dict[date, list[Instrument]] = {}
     instruments_by_id = {instrument.id: instrument for instrument in instruments}
     for instrument_id in yahoo_jobs:
@@ -229,7 +202,37 @@ def refresh_quotes(
                 quote_points[instrument.id] = fetched.get(symbol, [])
         except Exception as exc:  # noqa: BLE001
             for instrument in group:
-                errors.append(f"{instrument.ticker}: {exc}")
+                if _is_polish_stooq_listing(instrument):
+                    yahoo_errors[instrument.id] = str(exc)
+                else:
+                    errors.append(f"{instrument.ticker}: {exc}")
+
+    # Polish listings share the Yahoo batch. Only missing/failed symbols use
+    # Stooq, so a Stooq outage cannot delay a successful Yahoo refresh.
+    stooq_jobs.extend(
+        instrument for instrument in instruments
+        if _is_polish_stooq_listing(instrument)
+        and not quote_points.get(instrument.id)
+    )
+    if stooq_jobs:
+        stooq = get_adapter("stooq")
+        worker_count = min(MAX_CONCURRENT_STOOQ_REQUESTS, len(stooq_jobs))
+        with ThreadPoolExecutor(max_workers=worker_count) as executor:
+            futures = [
+                executor.submit(
+                    stooq.fetch_history, instrument.symbol, starts[instrument.id],
+                    end, instrument.currency,
+                )
+                for instrument in stooq_jobs
+            ]
+            for instrument, future in zip(stooq_jobs, futures):
+                try:
+                    quote_points[instrument.id] = future.result()
+                except Exception as exc:  # noqa: BLE001
+                    quote_points.pop(instrument.id, None)
+                    yahoo_error = yahoo_errors.get(instrument.id)
+                    detail = f"Yahoo Finance: {yahoo_error}; Stooq: {exc}" if yahoo_error else str(exc)
+                    errors.append(f"{instrument.ticker}: {detail}")
 
     for instrument in instruments:
         if instrument.id not in quote_points:

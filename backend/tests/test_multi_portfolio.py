@@ -108,7 +108,8 @@ class MultiPortfolioTest(unittest.TestCase):
             {"TEST.WA": (date.today() - timedelta(days=5), date.today(), "PLN")}
         )
 
-    def test_quote_refresh_skips_removed_zwc_instrument(self):
+    @patch("app.services.quotes.YahooAdapter.fetch_many", return_value={})
+    def test_quote_refresh_skips_removed_zwc_instrument(self, _fetch_many):
         zwc = Instrument(
             ticker="ZWC",
             name="ZWC",

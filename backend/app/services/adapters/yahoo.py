@@ -1,10 +1,11 @@
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 import logging
 import math
 import threading
 import time
+from time import monotonic
 
 import yfinance as yf
 
@@ -21,6 +22,10 @@ MINOR_CURRENCY_DIVISORS = {
     "ILA": ("ILS", Decimal("100")),
 }
 DOWNLOAD_LOCK = threading.Lock()
+CURRENCY_CACHE_TTL_SECONDS = 24 * 60 * 60
+MAX_CACHED_CURRENCIES = 2048
+CURRENCY_CACHE: OrderedDict[str, tuple[float, str]] = OrderedDict()
+CURRENCY_CACHE_LOCK = threading.Lock()
 
 
 class _YFinanceLogCapture(logging.Handler):
@@ -88,11 +93,28 @@ class YahooAdapter:
 
     @staticmethod
     def _raw_currency(symbol: str, fallback: str) -> str:
+        key = YahooAdapter._canonical_symbol(symbol).upper()
+        with CURRENCY_CACHE_LOCK:
+            cached = CURRENCY_CACHE.get(key)
+            if cached is not None:
+                expires, currency = cached
+                if monotonic() < expires:
+                    CURRENCY_CACHE.move_to_end(key)
+                    return currency
+                del CURRENCY_CACHE[key]
         try:
             currency = YahooAdapter._with_currency_retry(symbol)
         except Exception:
             logger.warning("Yahoo currency lookup failed for %s; using stored currency %s", symbol, fallback, exc_info=True)
             return fallback
+        if currency:
+            # Cache the raw unit (e.g. GBp), not GBP: cached quotes must still
+            # be divided by 100 on every subsequent refresh.
+            with CURRENCY_CACHE_LOCK:
+                CURRENCY_CACHE[key] = (monotonic() + CURRENCY_CACHE_TTL_SECONDS, currency)
+                CURRENCY_CACHE.move_to_end(key)
+                while len(CURRENCY_CACHE) > MAX_CACHED_CURRENCIES:
+                    CURRENCY_CACHE.popitem(last=False)
         return currency or fallback
 
     @staticmethod
